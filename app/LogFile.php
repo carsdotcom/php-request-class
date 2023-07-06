@@ -1,6 +1,11 @@
 <?php
 /**
- * Generate a log file for a given API.
+ * Write a log file a Storage facade disk, 
+ * using a standardized file name (ISO-8601 with microseconds)
+ * lots of helpful formatters, especially around Guzzle Requests, Responses, and Exceptions
+ * and using a log structure provided by the caller.
+ * 
+ * If you're thoughtful about building metadata into the log folder structure, it's easy to build a GUI to list and retrieve those logs 
  */
 
 namespace Carsdotcom\ApiRequest;
@@ -16,12 +21,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
-/**
- * We have a couple of APIs where it is occasionally helpful to have a log file that extensively documents the full request (URL, body, etc) and response (status, body)
- * We don't want to stuff these into one log file, it's much easier to put them in a storage container with a known folder structure, and then we have GUIs like the hidden MarketScan tab on the /deals list that let a layman download those files. Then we can ship that entire file to a support team as needed.
- *
- * Class LogFile
- */
 class LogFile
 {
     /** @const  Carbon format for log file names, ISO-8601 with microseconds */
@@ -38,7 +37,7 @@ class LogFile
 
     /**
      * Given a folder and an array of contents, create a new log file (named based on date and time) and upload it to the cloud.
-     * Note, the top folder is the name of the internal integration (e.g., MarketScan), then its internal folder structure is the integration's business.
+     * Note, the caller should be making semantic decisions about the folder structure that make it easy to identify and retrieve.
      * @param  string $folder
      * @param  array $contents
      * @return ?string     generated file name or null for unrecoverable errors
@@ -138,7 +137,7 @@ class LogFile
 
     /**
      * If you need regex matching on files in a specific folder, this is your baby. Note, this could be unimaginably expensive, it's like running `find | egrep` ... over a network.
-     * @param  string     $path   Please try to limit your search as much as possible, e.g. to a single feature like 'marketscan'. This param requires a literal, non-pattern. "" is valid but not recommended.
+     * @param  string     $path   Please try to limit your search as much as possible. This param requires a literal, non-pattern. "" is valid but not recommended.
      * @param  string     $regex NOTE: The argument is Regular Expression syntax over the entire file path, *not* glob.
      * @return Collection
      */
