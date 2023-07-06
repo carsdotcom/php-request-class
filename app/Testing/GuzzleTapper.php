@@ -1,4 +1,11 @@
 <?php
+/**
+ * Guzzle Tapper is a way to declaratively configure responses for Guzzle's MockHandler for unit tests.
+ * You provide Guzzle Tapper with a HTTP method, URL pattern, and a response behavior.
+ * Then your code under test makes Guzzle requests like it normally would.
+ * Guzzle Tapper walks the list of URL patterns until it finds a match, then returns the response behavior 
+ *   (usually a test body, but could be an exception or even run assertions on the request body before responding)
+ */
 
 namespace Carsdotcom\ApiRequest\Testing;
 
@@ -99,7 +106,7 @@ class GuzzleTapper
 
     /**
      * Guzzle's MockHandler is designed to fulfill responses in order, internally it array_shifts off a queue.
-     * Tapper is designed to allow you to specify if-request-then-response decoratively, so matches aren't order-bound. This is more expressive, and if you refactor your request-making code to change the order of operations, you don't have to rewrite your unit tests.
+     * Tapper is designed to allow you to specify if-request-then-response declaratively, so matches aren't order-bound. This is more expressive, and if you refactor your request-making code to change the order of operations, you don't have to rewrite your unit tests.
      * To bridge the two designs, we stuff MockHandler's queue with a large number of our response() method, as a callable. MockHandler will call response() once for every request, and internally Tapper will decide which response to feed it based on the Guzzle Request MockHandler provides us.
      * @return array of callable
      */
