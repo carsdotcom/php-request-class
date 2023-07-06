@@ -1,5 +1,5 @@
 {
-    "name": "carsdotcom/api-request",
+    "name": "carsdotcom/php-request-class",
     "type": "project",
     "version": "v1.0.0",
     "description": "Structure the logic around Guzzle API requests into object-oriented classes",
