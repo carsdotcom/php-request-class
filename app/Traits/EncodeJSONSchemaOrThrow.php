@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Carsdotcom\ApiRequest\Traits;
 
+use Carsdotcom\ApiRequest\Helpers;
 use Carsdotcom\JsonSchemaValidation\SchemaValidator;
-use App\Helpers;
 use Symfony\Component\HttpFoundation\Response;
 
 trait EncodeJSONSchemaOrThrow

@@ -9,10 +9,9 @@ declare(strict_types=1);
 
 namespace Carsdotcom\ApiRequest\Traits;
 
-use App\Exceptions\APIClients\UpstreamException;
-use Carsdotcom\JsonSchemaValidation\Exceptions\JsonSchemaValidationException;
+use Carsdotcom\ApiRequest\Exceptions\UpstreamException;
+use Carsdotcom\ApiRequest\Helpers;
 use Carsdotcom\JsonSchemaValidation\SchemaValidator;
-use App\Helpers;
 use Symfony\Component\HttpFoundation\Response;
 
 trait ParseResponseJSONSchemaOrThrow
