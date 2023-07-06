@@ -33,7 +33,6 @@ trait ParseResponseGraphQL
         }
 
         if (Arr::get($parsed, 'errors', [])) {
-            //Bugsnag::leaveBreadcrumb('GraphQL Error', metaData: $parsed['errors'][0]);
             $message = Arr::get($parsed, 'errors.0.message', 'Unspecified GraphQL error');
             throw new UpstreamException('Trouble calling ' . Helpers::friendlyClassName($this) . ': ' . $message);
         }

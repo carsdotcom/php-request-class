@@ -41,19 +41,14 @@ trait ParseResponseJSONSchemaOrThrow
             );
         }
 
-        try {
-            SchemaValidator::validateOrThrow(
-                $parsed,
-                static::RESPONSE_SCHEMA,
-                'Unexpected problem with ' .
-                    Helpers::friendlyClassName(static::class) .
-                    ' call: Response does not match expected schema',
-                failureHttpStatusCode: Response::HTTP_BAD_GATEWAY, // status code blames upstream API, we are but a gateway
-            );
-        } catch (JsonSchemaValidationException $e) {
-            //Bugsnag::leaveBreadcrumb('validation_errors', metaData: $e->errors());
-            throw $e;
-        }
+        SchemaValidator::validateOrThrow(
+            $parsed,
+            static::RESPONSE_SCHEMA,
+            'Unexpected problem with ' .
+            Helpers::friendlyClassName(static::class) .
+            ' call: Response does not match expected schema',
+            failureHttpStatusCode: Response::HTTP_BAD_GATEWAY, // status code blames upstream API, we are but a gateway
+        );
         return $parsed;
     }
 
