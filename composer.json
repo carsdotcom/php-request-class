@@ -3,8 +3,8 @@
     "type": "project",
     "version": "v1.0.0",
     "description": "Structure the logic around Guzzle API requests into object-oriented classes",
-    "keywords": ["library"],
-    "license": "UNLICENSED",
+    "keywords": ["php", "laravel", "guzzle"],
+    "license": "MIT",
     "require": {
         "carsdotcom/laravel-json-schema": "^v1.0",
         "ext-simplexml": "*",
