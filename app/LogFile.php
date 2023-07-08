@@ -158,7 +158,7 @@ class LogFile
      * @param string $folder
      * @return Collection
      */
-    protected static function filesInFolder(string $folder): Collection
+    public static function filesInFolder(string $folder): Collection
     {
         return collect(LogFile::disk()->files($folder))->map(function ($full_name) {
             return basename($full_name);

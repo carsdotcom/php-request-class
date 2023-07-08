@@ -53,14 +53,18 @@ trait MocksGuzzleInstance
      */
     protected function mockZeroGuzzleRequests(): void
     {
-        $this->mockGuzzleWithTapper();
         $exceptionResponse = new RequestException('Guzzle should not have been called.', new Request('GET', 'test'));
-        $this->tapper->addMatch('POST', '/.*?/', $exceptionResponse);
-        $this->tapper->addMatch('GET', '/.*?/', $exceptionResponse);
-        $this->tapper->addMatch('PUT', '/.*?/', $exceptionResponse);
-        $this->tapper->addMatch('PATCH', '/.*?/', $exceptionResponse);
-        $this->tapper->addMatch('DELETE', '/.*?/', $exceptionResponse);
-        $this->tapper->addMatch('OPTIONS', '/.*?/', $exceptionResponse);
+        $this->mockGuzzleWithTapper()
+            ->addMatch('POST', '/.*?/', $exceptionResponse)
+            ->addMatch('GET', '/.*?/', $exceptionResponse)
+            ->addMatch('PUT', '/.*?/', $exceptionResponse)
+            ->addMatch('PATCH', '/.*?/', $exceptionResponse)
+            ->addMatch('DELETE', '/.*?/', $exceptionResponse)
+            ->addMatch('OPTIONS', '/.*?/', $exceptionResponse);
+        // The tapper defined above has been dependency injected, but the reference in $this
+        // is broken, meaning a later call to $this->mockGuzzleWithTapper() will overwrite
+        // the one in dependency injection
+        $this->tapper = null;
     }
 
     /**
