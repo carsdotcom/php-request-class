@@ -37,18 +37,6 @@ trait MocksGuzzleInstance
     }
 
     /**
-     * Mocks the guzzle client and injects it into the app
-     *
-     * @return CustomMockInterface|Client
-     */
-    protected function mockGuzzleAppInstance()
-    {
-        $mockguzzle = mock(Client::class);
-        $this->app->instance('guzzle', $mockguzzle);
-        return $mockguzzle;
-    }
-
-    /**
      * Create a real guzzle client that users a MockHandler that throws an exception if it is called.
      */
     protected function mockZeroGuzzleRequests(): void

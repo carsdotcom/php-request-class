@@ -9,18 +9,6 @@ declare(strict_types=1);
 
 require __DIR__ . '/../vendor/autoload.php';
 
-if (!function_exists('mock')) {
-    /**
-     * Shortcut to mock an item
-     *
-     * @return \Tests\CustomMockInterface
-     */
-    function mock()
-    {
-        return call_user_func_array('Mockery::mock', func_get_args());
-    }
-}
-
 if (!function_exists('callMethod')) {
     /**
      * Call protected or private method
