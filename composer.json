@@ -1,7 +1,6 @@
 {
     "name": "carsdotcom/php-request-class",
-    "type": "project",
-    "version": "v1.0.0",
+    "type": "library",
     "description": "Structure the logic around Guzzle API requests into object-oriented classes",
     "keywords": ["php", "laravel", "guzzle"],
     "license": "MIT",
