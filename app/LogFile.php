@@ -1,11 +1,11 @@
 <?php
 /**
- * Write a log file a Storage facade disk, 
+ * Write a log file a Storage facade disk,
  * using a standardized file name (ISO-8601 with microseconds)
  * lots of helpful formatters, especially around Guzzle Requests, Responses, and Exceptions
  * and using a log structure provided by the caller.
- * 
- * If you're thoughtful about building metadata into the log folder structure, it's easy to build a GUI to list and retrieve those logs 
+ *
+ * If you're thoughtful about building metadata into the log folder structure, it's easy to build a GUI to list and retrieve those logs
  */
 
 namespace Carsdotcom\ApiRequest;
@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
+use GuzzleHttp\TransferStats;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -109,6 +110,8 @@ class LogFile
                 $string .= "\n\n" . self::stringify_body($body->getResponse());
             }
             return $string;
+        } elseif ($body instanceof TransferStats) {
+            return sprintf('Transfer time: %ss', $body->getTransferTime());
         } elseif (is_object($body) && method_exists($body, ' __toString')) {
             return $body->toString();
         }
@@ -155,7 +158,7 @@ class LogFile
      * @param string $folder
      * @return Collection
      */
-    protected static function filesInFolder(string $folder): Collection
+    public static function filesInFolder(string $folder): Collection
     {
         return collect(LogFile::disk()->files($folder))->map(function ($full_name) {
             return basename($full_name);

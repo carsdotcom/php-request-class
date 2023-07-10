@@ -555,4 +555,49 @@ class AbstractRequestTest extends BaseTestCase
 
         self::assertSame(42, $request->sync());
     }
+
+    public function testRequestLogHasTransferTime(): void
+    {
+        Storage::fake('api-logs');
+        $request = new class extends ConcreteRequest {
+            use ParseResponseJSON;
+            protected bool $shouldLog = true;
+            public function getLogFolder(): string
+            {
+                return 'one/two';
+            }
+        };
+        $tapper = $this->mockGuzzleWithTapper();
+        $tapper->addMatchBody('POST', '/awesome/', 'true');
+        $request->sync();
+
+        self::assertMatchesRegularExpression('/Transfer time: \d+\.*\d*s/', $request->getLastLogContents());
+    }
+
+    /**
+     * @dataProvider provideSetBodyIfNotEmpty
+     */
+    public function testSetBodyIfNotEmpty($value, bool $shouldExist): void
+    {
+        $request = new ConcreteRequest();
+        $request->setBodyIfNotEmpty('key', $value);
+        if ($shouldExist) {
+            self::assertArrayHasKey('key', $request->getBody());
+            self::assertSame($value, $request->getBody()['key']);
+        } else {
+            self::assertArrayNotHasKey('key', $request->getBody());
+        }
+    }
+
+    public function provideSetBodyIfNotEmpty(): array
+    {
+        return [
+            ['', false],
+            [null, false],
+            [false, false],
+            [0, false], // This one stresses me out a little, but it's not relevant today
+            ['Jeremy', true],
+            ['68144', true],
+        ];
+    }
 }

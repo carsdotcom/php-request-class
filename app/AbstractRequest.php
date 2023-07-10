@@ -24,6 +24,8 @@ use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Promise\RejectedPromise;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
+use GuzzleHttp\RequestOptions;
+use GuzzleHttp\TransferStats;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Cache;
@@ -57,6 +59,9 @@ abstract class AbstractRequest
     // The most recent response, if this instance has been sent.
     protected ?Response $response = null;
     protected bool $responseIsFromCache = false;
+
+    /** The transfer stats of the request */
+    protected ?TransferStats $requestStats = null;
 
     /**
      * Use object state to generate an appropriate URL for the request.
@@ -202,6 +207,17 @@ abstract class AbstractRequest
     }
 
     /**
+     * Sets the transfer stats of the request to the member variable for use in logging
+     */
+    private function setOnStats(): void
+    {
+        if (empty($this->guzzleOptions[RequestOptions::ON_STATS])) {
+            $this->guzzleOptions[RequestOptions::ON_STATS] = function(TransferStats $transferStats) {
+                $this->requestStats = $transferStats;
+            };
+        }
+    }
+    /**
      * This should be overridden by the Encode traits in app/Requests/Traits to turn the request body into a suitable string
      */
     public function encodeBody(): ?string
@@ -217,6 +233,7 @@ abstract class AbstractRequest
     {
         $this->setContentHeaders();
         $this->setAcceptHeaders();
+        $this->setOnStats();
 
         return new Request($this->method, $this->getURL(), $this->headers, $this->encodeBody());
     }
@@ -356,7 +373,7 @@ abstract class AbstractRequest
         if (!$this->shouldLog) {
             return;
         }
-        $logged = LogFile::put($this->getLogFolder(), [$this->toGuzzle(), $outcome]);
+        $logged = LogFile::put($this->getLogFolder(), [$this->toGuzzle(), $outcome, $this->requestStats]);
         if ($logged) {
             $this->sentLogs[] = $logged;
         }

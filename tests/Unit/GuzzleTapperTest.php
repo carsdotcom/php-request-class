@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Exception\ServerException;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
@@ -197,5 +198,21 @@ class GuzzleTapperTest extends BaseTestCase
         // New call on POST method
         $client->post('http://apple.com/');
         self::assertSame(4, $tapper->getCountAll(), "Sums across methods");
+    }
+
+    public function testCanMockNoneThenReplaceWithMockSome(): void
+    {
+        $this->mockZeroGuzzleRequests();
+        try {
+            app()->make('guzzle')->get('http://apple.com/');
+            self::fail('Should have thrown a Request Exception, Guzzle is mocked to permit zero requests');
+        } catch (RequestException $e) {
+            self::assertSame('Guzzle should not have been called.', $e->getMessage());
+        }
+
+        $this->mockGuzzleWithTapper()->addMatchBody('GET', '/apple/', 'green');
+
+        $response = app()->make('guzzle')->get('http://apple.com/');
+        self::assertSame('green', (string)$response->getBody());
     }
 }
