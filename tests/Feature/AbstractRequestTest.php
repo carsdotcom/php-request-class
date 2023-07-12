@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Carbon\CarbonInterval;
 use Carsdotcom\ApiRequest\Exceptions\UpstreamException;
 use Carsdotcom\ApiRequest\Exceptions\ToDoException;
 use Carsdotcom\ApiRequest\Traits\EncodeRequestJSON;
@@ -9,11 +10,13 @@ use Carsdotcom\ApiRequest\Traits\ParseResponseJSON;
 use Carsdotcom\ApiRequest\Traits\ParseResponseJSONOrThrow;
 use Carbon\Carbon;
 use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\ServerException;
 use GuzzleHttp\Promise\Promise;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Promise\RejectedPromise;
 use GuzzleHttp\Promise\RejectionException;
+use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -522,9 +525,10 @@ class AbstractRequestTest extends BaseTestCase
         Carbon::setTestNow('2020-02-02T00:00:00+00:00');
         $request->setExpires($minutes);
         self::assertSame($expected, $request->cacheExpiresTime()->format('c'));
-        Log::assertLogged(fn (LogEntry $log) =>
-            $log->level === 'notice'
-            && $log->message === 'Deprecation notice: Anonymous Descendent of Concrete Request has an `expires` property defined for expiration. Please update it to override the `cacheExpiresTime` method instead.'
+        Log::assertLogged(
+            fn(LogEntry $log) => $log->level === 'notice' &&
+                $log->message ===
+                    'Deprecation notice: Anonymous Descendent of Concrete Request has an `expires` property defined for expiration. Please update it to override the `cacheExpiresTime` method instead.',
         );
     }
 
@@ -599,5 +603,55 @@ class AbstractRequestTest extends BaseTestCase
             ['Jeremy', true],
             ['68144', true],
         ];
+    }
+
+    public function testTimeout(): void
+    {
+        $request = new ConcreteRequest();
+        $defaultOptions = getProperty($request, 'guzzleOptions');
+        self::assertSame(30, $defaultOptions['timeout']);
+
+        $request->setTimeout(CarbonInterval::weeks(2));
+        // 1209600 seconds in two weeks (60 * 60 * 24 * 7 * 2)
+        self::assertSame(1209600, getProperty($request, 'guzzleOptions')['timeout']);
+    }
+
+    public function testLogsTimeout(): void
+    {
+        Storage::fake('api-logs');
+        Carbon::setTestNow('2023-02-03 00:00:00');
+        $request = new class extends ConcreteRequest {
+            protected bool $shouldLog = true;
+            public function getLogFolder(): string
+            {
+                return 'timeout';
+            }
+        };
+        $this->mockGuzzleWithTapper()->addMatch('POST', '/awesome/', function (Request $request) {
+            // Guzzle MockHandler doesn't actually observe timeouts, so we're faking behavior
+            throw new ConnectException(
+                'cURL error 28: Operation timed out after 30000 milliseconds with 0 bytes received (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for https://awesome-api.com/url',
+                $request,
+            );
+        });
+        try {
+            $request->sync();
+            self::fail('Should have thrown exception');
+        } catch (ConnectException $e) {
+            self::assertSame(
+                <<<LOG
+                POST https://awesome-api.com/url
+
+                Exception thrown: GuzzleHttp\Exception\ConnectException
+                cURL error 28: Operation timed out after 30000 milliseconds with 0 bytes received (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for https://awesome-api.com/url
+
+
+                null
+
+                LOG
+                ,
+                $request->getLastLogContents(),
+            );
+        }
     }
 }

@@ -11,6 +11,7 @@
 namespace Carsdotcom\ApiRequest;
 
 use Carbon\Carbon;
+use Carsdotcom\JsonSchemaValidation\Contracts\HasExtendedExceptionData;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
@@ -108,6 +109,12 @@ class LogFile
 
             if ($body->hasResponse()) {
                 $string .= "\n\n" . self::stringify_body($body->getResponse());
+            }
+            return $string;
+        } elseif ($body instanceof \Throwable) {
+            $string = 'Exception thrown: ' . get_class($body) . "\n" . $body->getMessage() . "\n";
+            if ($body instanceof HasExtendedExceptionData) {
+                $string .= json_encode($body->getExtendedData(), JSON_PRETTY_PRINT) . "\n";
             }
             return $string;
         } elseif ($body instanceof TransferStats) {

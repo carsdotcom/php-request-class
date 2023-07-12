@@ -15,6 +15,7 @@
  */
 namespace Carsdotcom\ApiRequest;
 
+use Carbon\CarbonInterval;
 use Carsdotcom\ApiRequest\Exceptions\ToDoException;
 use Carbon\Carbon;
 use DomainException;
@@ -51,7 +52,9 @@ abstract class AbstractRequest
     protected array $arguments = [];
 
     /** @var array Configuration options for the underlying Guzzle client */
-    protected array $guzzleOptions = [];
+    protected array $guzzleOptions = [
+        RequestOptions::TIMEOUT => 30 // float seconds https://docs.guzzlephp.org/en/stable/request-options.html#timeout
+    ];
 
     // Array of file names (relative to getLogFolder()) that have been saved by this request instance.
     protected array $sentLogs = [];
@@ -463,5 +466,15 @@ abstract class AbstractRequest
     public function getLastLogFile(): string
     {
         return Str::finish($this->getLogFolder(), '/') . Arr::last($this->sentLogs);
+    }
+
+    /**
+     * Change the timeout of this request. This is the preferred way to override the default,
+     * even in the constructor of a custom class I think this is much more expressive than a numeric constant
+     * @example $this->setTimeout(CarbonInterval::minutes(5));
+     */
+    public function setTimeout(CarbonInterval $interval): void
+    {
+        $this->guzzleOptions[RequestOptions::TIMEOUT] = $interval->totalSeconds;
     }
 }
