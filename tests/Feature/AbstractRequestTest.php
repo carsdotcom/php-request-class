@@ -24,7 +24,6 @@ use Illuminate\Support\Facades\Storage;
 use Tests\BaseTestCase;
 use Tests\MockClasses\ConcreteRequest;
 use Carsdotcom\ApiRequest\Testing\MocksGuzzleInstance;
-use TiMacDonald\Log\LogEntry;
 use TiMacDonald\Log\LogFake;
 
 class AbstractRequestTest extends BaseTestCase
@@ -514,7 +513,7 @@ class AbstractRequestTest extends BaseTestCase
      */
     public function testUseExpiresPropToSetCacheExpiresTime(int $minutes, string $expected): void
     {
-        LogFake::bind();
+        Log::swap(new LogFake());
         $request = new class extends ConcreteRequest {
             public int $expires;
             public function setExpires(int $minutes)
@@ -526,9 +525,9 @@ class AbstractRequestTest extends BaseTestCase
         $request->setExpires($minutes);
         self::assertSame($expected, $request->cacheExpiresTime()->format('c'));
         Log::assertLogged(
-            fn(LogEntry $log) => $log->level === 'notice' &&
-                $log->message ===
-                    'Deprecation notice: Anonymous Descendent of Concrete Request has an `expires` property defined for expiration. Please update it to override the `cacheExpiresTime` method instead.',
+            'notice',
+            fn($message) => $message ===
+                'Deprecation notice: Anonymous Descendent of Concrete Request has an `expires` property defined for expiration. Please update it to override the `cacheExpiresTime` method instead.',
         );
     }
 

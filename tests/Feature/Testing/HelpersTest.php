@@ -3,7 +3,7 @@
 namespace Tests\Feature\Testing;
 
 use Carsdotcom\ApiRequest\Testing\Helpers;
-use Symfony\Component\HttpFoundation\File\Exception\FileNotFoundException;
+use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Tests\BaseTestCase;
 
 class HelpersTest extends BaseTestCase
@@ -16,7 +16,7 @@ class HelpersTest extends BaseTestCase
 
     public function testGetDataFileDoesNotExist(): void
     {
-        self::expectExceptionObject(new FileNotFoundException("nope.json"));
+        self::expectExceptionObject(new FileNotFoundException('nope.json'));
         Helpers::getDataFile('nope.json');
     }
 
