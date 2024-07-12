@@ -532,7 +532,7 @@ class AbstractRequestTest extends BaseTestCase
         );
     }
 
-    public function provideUseExpiresPropToSetCacheExpiresTime(): array
+    public static function provideUseExpiresPropToSetCacheExpiresTime(): array
     {
         return [
             [1, '2020-02-02T00:01:00+00:00'],
@@ -593,7 +593,7 @@ class AbstractRequestTest extends BaseTestCase
         }
     }
 
-    public function provideSetBodyIfNotEmpty(): array
+    public static function provideSetBodyIfNotEmpty(): array
     {
         return [
             ['', false],
@@ -613,7 +613,7 @@ class AbstractRequestTest extends BaseTestCase
 
         $request->setTimeout(CarbonInterval::weeks(2));
         // 1209600 seconds in two weeks (60 * 60 * 24 * 7 * 2)
-        self::assertSame(1209600, getProperty($request, 'guzzleOptions')['timeout']);
+        self::assertSame(1209600, (int) getProperty($request, 'guzzleOptions')['timeout']);
     }
 
     public function testLogsTimeout(): void
