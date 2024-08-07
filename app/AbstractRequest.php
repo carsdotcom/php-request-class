@@ -323,12 +323,15 @@ abstract class AbstractRequest
         Cache::tags($this->cacheTags)->put(
             $this->cacheKey(),
             [
-                // matches the argument order for Response constructor
-                $this->response->getStatusCode(),
-                $this->response->getHeaders(),
-                (string) $this->response->getBody(),
-                $this->response->getProtocolVersion(),
-                $this->response->getReasonPhrase(),
+                'logs' => $this->sentLogs,
+                'response' => [
+                    // matches the argument order for Response constructor
+                    $this->response->getStatusCode(),
+                    $this->response->getHeaders(),
+                    (string) $this->response->getBody(),
+                    $this->response->getProtocolVersion(),
+                    $this->response->getReasonPhrase(),
+                ]
             ],
             $this->cacheExpiresTime(),
         );
@@ -341,7 +344,38 @@ abstract class AbstractRequest
         }
 
         $fromCache = Cache::tags($this->cacheTags)->get($this->cacheKey());
-        return $fromCache ? new Response(...$fromCache) : null;
+        if ($fromCache) {
+            $this->sentLogs = $fromCache['logs'];
+            return new Response(...$fromCache['response']);
+        }
+        return null;
+    }
+
+    /**
+     * Return cache key string based on this class, URL, and request body
+     * @return string
+     */
+    public function cacheKey(): string
+    {
+        return hash(
+            'sha256',
+            json_encode([
+                self::class,
+                $this->getURL(),
+                $this->encodeBody(),
+                config('api-request.cache_key_seed', 'v2024.8.6'),
+            ]),
+        );
+    }
+
+    public function canBeFulfilledByCache(): bool
+    {
+        return Cache::tags($this->cacheTags)->has($this->cacheKey());
+    }
+
+    public function isFromCache(): bool
+    {
+        return $this->responseIsFromCache;
     }
 
     /**
@@ -388,10 +422,20 @@ abstract class AbstractRequest
      */
     public function getLastLogContents(): string
     {
+        return LogFile::disk()->get($this->getLastLogFile());
+    }
+
+    /**
+     * Get the filename for the last run of this instance of this request.
+     * If the last sync or async was a cache hit, this will return the original log of the request that was cached
+     * @throws DomainException if this instance has never logged (could mean never run, or $shouldLog is false)
+     */
+    public function getLastLogFile(): string
+    {
         if (!$this->sentLogs) {
             throw new DomainException('No log files have been saved by this instance.');
         }
-        return LogFile::disk()->get($this->getLastLogFile());
+        return Str::finish($this->getLogFolder(), '/') . Arr::last($this->sentLogs);
     }
 
     /**
@@ -439,36 +483,6 @@ abstract class AbstractRequest
     }
 
     /**
-     * Return cache key string based on this class, URL, and request body
-     * @return string
-     */
-    public function cacheKey(): string
-    {
-        return hash(
-            'sha256',
-            json_encode([
-                self::class,
-                $this->getURL(),
-                $this->encodeBody(),
-                config('api-request.cache_key_seed', 'v2022.4.12.0'),
-            ]),
-        );
-    }
-
-    public function canBeFulfilledByCache(): bool
-    {
-        return Cache::tags($this->cacheTags)->has($this->cacheKey());
-    }
-
-    /**
-     * @return string
-     */
-    public function getLastLogFile(): string
-    {
-        return Str::finish($this->getLogFolder(), '/') . Arr::last($this->sentLogs);
-    }
-
-    /**
      * Change the timeout of this request. This is the preferred way to override the default,
      * even in the constructor of a custom class I think this is much more expressive than a numeric constant
      * @example $this->setTimeout(CarbonInterval::minutes(5));
@@ -477,4 +491,5 @@ abstract class AbstractRequest
     {
         $this->guzzleOptions[RequestOptions::TIMEOUT] = $interval->totalSeconds;
     }
+
 }

@@ -31,6 +31,12 @@ class AbstractRequestTest extends BaseTestCase
 {
     use MocksGuzzleInstance;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Storage::fake('api-logs');
+    }
+
     protected function mockRequestWithLog()
     {
         return new class extends ConcreteRequest {
@@ -38,15 +44,9 @@ class AbstractRequestTest extends BaseTestCase
 
             protected bool $shouldLog = true;
 
-            public $logged;
-            public function log($outcome): void
+            public function getLogFolder(): string
             {
-                $this->logged = $outcome;
-            }
-
-            public function isFromCache(): bool
-            {
-                return $this->responseIsFromCache;
+                return 'one/two';
             }
         };
     }
@@ -54,14 +54,13 @@ class AbstractRequestTest extends BaseTestCase
     public function testCacheMissUsesGuzzle(): void
     {
         $this->mockGuzzleWithTapper();
-        $expectedResponse = new Response(200, [], '{"awesome":"sauce"}');
-        $this->tapper->addMatch('POST', '/.*?/', $expectedResponse);
+        $this->tapper->addMatchBody('POST', '/.*?/', '{"awesome":"sauce"}');
 
         $requestClass = $this->mockRequestWithLog();
 
         $result = $requestClass->sync();
 
-        self::assertSame($expectedResponse, $requestClass->logged);
+        self::assertStringContainsString('"sauce"', $requestClass->getLastLogContents());
         $this->expectTotalRequestCount(1);
         $this->assertTapperRequestLike('POST', '/.*?/', 1);
 
@@ -101,6 +100,38 @@ class AbstractRequestTest extends BaseTestCase
 
         // Result matches cache
         self::assertTrue($secondRequest->canBeFulfilledByCache());
+    }
+
+    public function testCacheHitHasAccessToOriginalLog(): void
+    {
+        Storage::fake('api-logs');
+        $tapper = $this->mockGuzzleWithTapper();
+        $tapper->addMatchBody('POST', '/awesome/', '{"awesome":"sauce"}');
+
+        $firstLogTime = '2018-01-01T00:00:00.000000+00:00';
+        Carbon::setTestNow($firstLogTime);
+        $firstRequest = $this->mockRequestWithLog();
+        $firstRequest->sync();
+        self::assertTrue($firstRequest->canBeFulfilledByCache());
+        self::assertSame($firstRequest->getLastLogFile(), "one/two/{$firstLogTime}");
+        self::assertSame(1, $tapper->getCountLike('POST', '/awesome/'));
+
+        // Regenerate the request
+        $secondLogTime = '2018-01-01T00:02:02.000000+00:00';
+        Carbon::setTestNow($secondLogTime);
+        $secondRequest = $this->mockRequestWithLog();
+        self::assertTrue($secondRequest->canBeFulfilledByCache());
+        // Both requests have same key
+        self::assertSame($firstRequest->cacheKey(), $secondRequest->cacheKey());
+
+        $secondRequest->sync();
+        self::assertSame(1, $tapper->getCountLike('POST', '/awesome/'));
+        // Result was in cache
+        self::assertTrue($secondRequest->isFromCache());
+        // Second request can retrieve log from original time
+        self::assertSame($secondRequest->getLastLogFile(), "one/two/{$firstLogTime}");
+        // Second request did not log to disk, only the first request
+        self::assertSame(["one/two/{$firstLogTime}"], Storage::disk('api-logs')->files('one/two'));
     }
 
     public function testDontCacheErrorStatus(): void
@@ -320,6 +351,7 @@ class AbstractRequestTest extends BaseTestCase
         $tapper->addMatchBody('POST', '/awesome/', 'true');
 
         $this->expectException(ToDoException::class);
+        $this->expectExceptionMessageMatches('/To enable request logging, .+ will have to implement the method getLogFolder/');
         $request->sync();
     }
 
@@ -366,6 +398,12 @@ class AbstractRequestTest extends BaseTestCase
         } catch (\DomainException $exception) {
             self::assertSame('No log files have been saved by this instance.', $exception->getMessage());
         }
+        try {
+            $request->getLastLogFile();
+            self::fail('Should have thrown');
+        } catch (\DomainException $exception) {
+            self::assertSame('No log files have been saved by this instance.', $exception->getMessage());
+        }
 
         $tapper = $this->mockGuzzleWithTapper();
         $tapper->addMatchBody('POST', '/awesome/', 'true');
@@ -374,6 +412,7 @@ class AbstractRequestTest extends BaseTestCase
         Carbon::setTestNow($firstLogTime);
         $request->sync();
         Storage::disk('api-logs')->assertExists("one/two/{$firstLogTime}");
+        self::assertSame($request->getLastLogFile(), "one/two/{$firstLogTime}");
         self::assertSame($request->getLastLogContents(), Storage::disk('api-logs')->get("one/two/{$firstLogTime}"));
 
         // Make a second log, see that it's now returned
@@ -383,6 +422,7 @@ class AbstractRequestTest extends BaseTestCase
         Carbon::setTestNow($secondLogTime);
         $request->sync();
         Storage::disk('api-logs')->assertExists("one/two/{$secondLogTime}");
+        self::assertSame($request->getLastLogFile(), "one/two/{$secondLogTime}");
         self::assertSame($request->getLastLogContents(), Storage::disk('api-logs')->get("one/two/{$secondLogTime}"));
     }
 
@@ -553,7 +593,7 @@ class AbstractRequestTest extends BaseTestCase
         Cache::shouldReceive('get')
             ->once()
             ->with($request->cacheKey())
-            ->andReturn([200, [], '42']);
+            ->andReturn(['logs' => [], 'response' => [200, [], '42']]);
         // It is NOT written back to cache
         Cache::shouldReceive('put')->never();
 
