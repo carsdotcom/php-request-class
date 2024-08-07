@@ -39,7 +39,7 @@ class BaseTestCase extends TestCase
         array $headers = [],
     ) {
         $tags = getProperty($request, 'cacheTags');
-        Cache::tags($tags)->put($request->cacheKey(), [$status, $headers, $body]);
+        Cache::tags($tags)->put($request->cacheKey(), ['logs' => [], 'response' => [$status, $headers, $body]]);
     }
 
     /**

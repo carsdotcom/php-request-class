@@ -323,12 +323,15 @@ abstract class AbstractRequest
         Cache::tags($this->cacheTags)->put(
             $this->cacheKey(),
             [
-                // matches the argument order for Response constructor
-                $this->response->getStatusCode(),
-                $this->response->getHeaders(),
-                (string) $this->response->getBody(),
-                $this->response->getProtocolVersion(),
-                $this->response->getReasonPhrase(),
+                'logs' => $this->sentLogs,
+                'response' => [
+                    // matches the argument order for Response constructor
+                    $this->response->getStatusCode(),
+                    $this->response->getHeaders(),
+                    (string) $this->response->getBody(),
+                    $this->response->getProtocolVersion(),
+                    $this->response->getReasonPhrase(),
+                ]
             ],
             $this->cacheExpiresTime(),
         );
@@ -341,7 +344,11 @@ abstract class AbstractRequest
         }
 
         $fromCache = Cache::tags($this->cacheTags)->get($this->cacheKey());
-        return $fromCache ? new Response(...$fromCache) : null;
+        if ($fromCache) {
+            $this->sentLogs = $fromCache['logs'];
+            return new Response(...$fromCache['response']);
+        }
+        return null;
     }
 
     /**
@@ -388,9 +395,6 @@ abstract class AbstractRequest
      */
     public function getLastLogContents(): string
     {
-        if (!$this->sentLogs) {
-            throw new DomainException('No log files have been saved by this instance.');
-        }
         return LogFile::disk()->get($this->getLastLogFile());
     }
 
@@ -450,7 +454,7 @@ abstract class AbstractRequest
                 self::class,
                 $this->getURL(),
                 $this->encodeBody(),
-                config('api-request.cache_key_seed', 'v2022.4.12.0'),
+                config('api-request.cache_key_seed', 'v2024.8.6'),
             ]),
         );
     }
@@ -460,11 +464,11 @@ abstract class AbstractRequest
         return Cache::tags($this->cacheTags)->has($this->cacheKey());
     }
 
-    /**
-     * @return string
-     */
     public function getLastLogFile(): string
     {
+        if (!$this->sentLogs) {
+            throw new DomainException('No log files have been saved by this instance.');
+        }
         return Str::finish($this->getLogFolder(), '/') . Arr::last($this->sentLogs);
     }
 
@@ -476,5 +480,10 @@ abstract class AbstractRequest
     public function setTimeout(CarbonInterval $interval): void
     {
         $this->guzzleOptions[RequestOptions::TIMEOUT] = $interval->totalSeconds;
+    }
+
+    public function isFromCache(): bool
+    {
+        return $this->responseIsFromCache;
     }
 }
