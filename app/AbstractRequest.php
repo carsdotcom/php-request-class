@@ -352,6 +352,33 @@ abstract class AbstractRequest
     }
 
     /**
+     * Return cache key string based on this class, URL, and request body
+     * @return string
+     */
+    public function cacheKey(): string
+    {
+        return hash(
+            'sha256',
+            json_encode([
+                self::class,
+                $this->getURL(),
+                $this->encodeBody(),
+                config('api-request.cache_key_seed', 'v2024.8.6'),
+            ]),
+        );
+    }
+
+    public function canBeFulfilledByCache(): bool
+    {
+        return Cache::tags($this->cacheTags)->has($this->cacheKey());
+    }
+
+    public function isFromCache(): bool
+    {
+        return $this->responseIsFromCache;
+    }
+
+    /**
      * For caching the response, how long should the cache be valid?
      * By default, this is one day. To customize, override this method.
      * i.e. If you need logic (e.g., read from an Expires: header in the response) override this method.
@@ -399,6 +426,19 @@ abstract class AbstractRequest
     }
 
     /**
+     * Get the filename for the last run of this instance of this request.
+     * If the last sync or async was a cache hit, this will return the original log of the request that was cached
+     * @throws DomainException if this instance has never logged (could mean never run, or $shouldLog is false)
+     */
+    public function getLastLogFile(): string
+    {
+        if (!$this->sentLogs) {
+            throw new DomainException('No log files have been saved by this instance.');
+        }
+        return Str::finish($this->getLogFolder(), '/') . Arr::last($this->sentLogs);
+    }
+
+    /**
      * Can be overridden by children or trait to parse the body in a known format (e.g. JSON or XML)
      * @param string $responseString
      * @return mixed (as dictated by traits like ParseResponseJson)
@@ -443,36 +483,6 @@ abstract class AbstractRequest
     }
 
     /**
-     * Return cache key string based on this class, URL, and request body
-     * @return string
-     */
-    public function cacheKey(): string
-    {
-        return hash(
-            'sha256',
-            json_encode([
-                self::class,
-                $this->getURL(),
-                $this->encodeBody(),
-                config('api-request.cache_key_seed', 'v2024.8.6'),
-            ]),
-        );
-    }
-
-    public function canBeFulfilledByCache(): bool
-    {
-        return Cache::tags($this->cacheTags)->has($this->cacheKey());
-    }
-
-    public function getLastLogFile(): string
-    {
-        if (!$this->sentLogs) {
-            throw new DomainException('No log files have been saved by this instance.');
-        }
-        return Str::finish($this->getLogFolder(), '/') . Arr::last($this->sentLogs);
-    }
-
-    /**
      * Change the timeout of this request. This is the preferred way to override the default,
      * even in the constructor of a custom class I think this is much more expressive than a numeric constant
      * @example $this->setTimeout(CarbonInterval::minutes(5));
@@ -482,8 +492,4 @@ abstract class AbstractRequest
         $this->guzzleOptions[RequestOptions::TIMEOUT] = $interval->totalSeconds;
     }
 
-    public function isFromCache(): bool
-    {
-        return $this->responseIsFromCache;
-    }
 }
