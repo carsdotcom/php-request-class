@@ -710,14 +710,13 @@ class AbstractRequestTest extends BaseTestCase
     public function testRequestCanReturnStaticResponseWithoutAffectingDependencyStore(): void
     {
         $requestWithCustomTapper = new class extends ConcreteRequest {
-            protected bool $shouldWriteCache = false; // the requests are identical but we want the second to still try to call the network (and fail)
+            // $requestWithCustomTapper and $requestWithSystemGuzzle are identical, so make sure cache doesn't confuse this test outcome
+            protected bool $shouldWriteCache = false;
             protected function getGuzzleClient(): Client
             {
                 $tapper = new GuzzleTapper();
                 $tapper->addMatchBody('POST', '/awesome/', 'Static data as documented', 200);
-                $mockHandler = new MockHandler($tapper->getResponses());
-                $handlerStack = HandlerStack::create($mockHandler);
-                return new Client(['handler' => $handlerStack]);
+                return $tapper->makeMockedGuzzleClient();
             }
         };
         $this->mockGuzzleWithTapper()->addMatchBody('POST', '/awesome/', 'This method is not implemented', 500);
