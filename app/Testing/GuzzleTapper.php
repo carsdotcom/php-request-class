@@ -10,6 +10,9 @@
 namespace Carsdotcom\ApiRequest\Testing;
 
 use Exception;
+use GuzzleHttp\Client;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Collection;
 use OutOfBoundsException;
@@ -139,6 +142,18 @@ class GuzzleTapper
     public function getResponses(): array
     {
         return array_fill(0, 100, [$this, 'response']);
+    }
+
+    /**
+     * Returns a new Guzzle Http Client using Tapper to fulfill all requests.
+     * This client is suitable for use in AbstractRequest::getGuzzleClient
+     * or a dependency injection system like Laravel's App::instance
+     */
+    public function makeMockedGuzzleClient(): Client
+    {
+        $mockHandler = new MockHandler($this->getResponses());
+        $handlerStack = HandlerStack::create($mockHandler);
+        return new Client(['handler' => $handlerStack]);
     }
 
     /**

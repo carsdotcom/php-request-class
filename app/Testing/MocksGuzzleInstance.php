@@ -1,6 +1,11 @@
 <?php
 /**
- * Trait to include to mock the guzzle instance into the app
+ * Add this trait to a unit test (or even your base TestCase)
+ * to allow you to replace your dependency injected Guzzle Client with the GuzzleTapper library.
+ *
+ * This will allow you to mock the methods and URLs that will be called
+ * (including even behavior that responds to the URL or request body)
+ * instead of Laravel Http facade's typical order-based matching
  */
 declare(strict_types=1);
 
@@ -15,14 +20,13 @@ use Psr\Http\Message\RequestInterface;
 
 trait MocksGuzzleInstance
 {
-    /** @var GuzzleTapper|null */
-    protected $tapper;
+    protected GuzzleTapper|null $tapper = null;
 
     /**
      * Replace Laravel's dependency-injected Guzzle
      * with a Client that responds with GuzzleTappers matching process
      * Note, you can keep adding new responses to GuzzleTapper any time before the matched request is made
-     * @return GuzzleTapper
+     * @see http://docs.guzzlephp.org/en/stable/testing.html
      */
     protected function mockGuzzleWithTapper(): GuzzleTapper
     {
@@ -30,8 +34,7 @@ trait MocksGuzzleInstance
             $this->tapper = new GuzzleTapper();
         }
 
-        $handler = new MockHandler($this->tapper->getResponses());
-        $this->mockGuzzleAppInstanceWithHandler($handler);
+        $this->app->instance('guzzle', $this->tapper->makeMockedGuzzleClient());
 
         return $this->tapper;
     }
@@ -57,10 +60,6 @@ trait MocksGuzzleInstance
 
     /**
      * Request has the header, and the value is or contains the required value
-     * @param Request $request
-     * @param string $headerName
-     * @param string $headerValue
-     * @param string|null $message
      */
     protected function assertSameRequestHeader(
         Request $request,
@@ -77,9 +76,6 @@ trait MocksGuzzleInstance
         }
     }
 
-    /**
-     * @param int $expectedRequestCount
-     */
     protected function expectTotalRequestCount(int $expectedRequestCount): void
     {
         if (!$this->tapper) {
@@ -144,18 +140,4 @@ trait MocksGuzzleInstance
         }
     }
 
-    /**
-     * Create a real guzzle client that can use a MockHandler class to mock all
-     * requests.
-     * @see http://docs.guzzlephp.org/en/stable/testing.html
-     * @param MockHandler $mock
-     * @return Client
-     */
-    private function mockGuzzleAppInstanceWithHandler(MockHandler $mock): Client
-    {
-        $handler = HandlerStack::create($mock);
-        $client = new Client(['handler' => $handler]);
-        $this->app->instance('guzzle', $client);
-        return $client;
-    }
 }

@@ -5,13 +5,17 @@ namespace Tests\Feature;
 use Carbon\CarbonInterval;
 use Carsdotcom\ApiRequest\Exceptions\UpstreamException;
 use Carsdotcom\ApiRequest\Exceptions\ToDoException;
+use Carsdotcom\ApiRequest\Testing\GuzzleTapper;
 use Carsdotcom\ApiRequest\Traits\EncodeRequestJSON;
 use Carsdotcom\ApiRequest\Traits\ParseResponseJSON;
 use Carsdotcom\ApiRequest\Traits\ParseResponseJSONOrThrow;
 use Carbon\Carbon;
+use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\ServerException;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Promise\Promise;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Promise\RejectedPromise;
@@ -128,8 +132,9 @@ class AbstractRequestTest extends BaseTestCase
         self::assertSame(1, $tapper->getCountLike('POST', '/awesome/'));
         // Result was in cache
         self::assertTrue($secondRequest->isFromCache());
-        // Second request can retrieve log from original time
+        // Second request can retrieve log from original time with original contents
         self::assertSame($secondRequest->getLastLogFile(), "one/two/{$firstLogTime}");
+        self::assertStringContainsString('"sauce"', $secondRequest->getLastLogContents());
         // Second request did not log to disk, only the first request
         self::assertSame(["one/two/{$firstLogTime}"], Storage::disk('api-logs')->files('one/two'));
     }
@@ -692,6 +697,41 @@ class AbstractRequestTest extends BaseTestCase
                 ,
                 $request->getLastLogContents(),
             );
+        }
+    }
+
+    /**
+     * In this example, $requestWithCustomTapper always uses a mocked response, even when the Guzzle Client in the
+     * App's dependency store does not.  This can be useful when you're building a Request class around documentation,
+     * and the endpoint you *will* call is not yet ready to be called.
+     * The getGuzzleClient method knows that it's returning mock data, every other part of your application acts
+     * as if the request is completely legitimate -- even logging and caching!
+     */
+    public function testRequestCanReturnStaticResponseWithoutAffectingDependencyStore(): void
+    {
+        $requestWithCustomTapper = new class extends ConcreteRequest {
+            protected bool $shouldWriteCache = false; // the requests are identical but we want the second to still try to call the network (and fail)
+            protected function getGuzzleClient(): Client
+            {
+                $tapper = new GuzzleTapper();
+                $tapper->addMatchBody('POST', '/awesome/', 'Static data as documented', 200);
+                $mockHandler = new MockHandler($tapper->getResponses());
+                $handlerStack = HandlerStack::create($mockHandler);
+                return new Client(['handler' => $handlerStack]);
+            }
+        };
+        $this->mockGuzzleWithTapper()->addMatchBody('POST', '/awesome/', 'This method is not implemented', 500);
+
+        $resultFromRequestTapper = $requestWithCustomTapper->sync();
+        self::assertSame('Static data as documented', $resultFromRequestTapper);
+
+        $requestWithSystemGuzzle = new ConcreteRequest();
+        try {
+            $requestWithSystemGuzzle->sync();
+            self::fail("Should have thrown ServerException");
+        } catch (ServerException $exception) {
+            self::assertSame(500, $exception->getCode());
+            self::assertSame("Server error: `POST https://awesome-api.com/url` resulted in a `500 Internal Server Error` response:\nThis method is not implemented\n", $exception->getMessage());
         }
     }
 }
