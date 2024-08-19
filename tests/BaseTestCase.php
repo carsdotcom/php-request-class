@@ -45,7 +45,7 @@ class BaseTestCase extends TestCase
     /**
      * Fetch the cached response to a request and assert that it contains a substring
      */
-    protected static function requestCacheBodyContains(
+    protected static function assertRequestCacheBodyContains(
         string $substring,
         AbstractRequest $request,
         string $message = '',
