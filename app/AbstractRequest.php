@@ -19,6 +19,7 @@ use Carbon\CarbonInterval;
 use Carsdotcom\ApiRequest\Exceptions\ToDoException;
 use Carbon\Carbon;
 use DomainException;
+use GuzzleHttp\Client;
 use GuzzleHttp\Exception\BadResponseException;
 use GuzzleHttp\Promise\FulfilledPromise;
 use GuzzleHttp\Promise\PromiseInterface;
@@ -273,7 +274,7 @@ abstract class AbstractRequest
                     $this->response = $cached;
                     $promise = new FulfilledPromise($cached);
                 } else {
-                    $promise = App::make('guzzle')
+                    $promise = $this->getGuzzleClient()
                         ->sendAsync($this->toGuzzle(), $this->guzzleOptions)
                         ->then(function (Response $response) {
                             $this->responseIsFromCache = false;
@@ -300,6 +301,16 @@ abstract class AbstractRequest
             })
             ->otherwise($this->otherwise(...));
     }
+
+    /**
+     * This method can be overridden if a request class shouldn't share a Guzzle Client with the rest of the app
+     * This can be useful if one request needs to be mocked with Tapper, even when other requests send real traffic.
+     */
+    protected function getGuzzleClient(): Client
+    {
+        return App::make('guzzle');
+    }
+
 
     public function purgeCache(): self
     {
