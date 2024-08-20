@@ -40,6 +40,7 @@ abstract class AbstractRequest
     protected bool $shouldReadCache = true;
     protected bool $shouldWriteCache = true;
 
+
     /** @var array Tags to be used when inserting to cache */
     protected array $cacheTags = [];
 
@@ -323,6 +324,8 @@ abstract class AbstractRequest
         return $this->shouldWriteCache && !$this->responseIsFromCache;
     }
 
+    public const CACHE_KEY_SEED = 'v2024.8.6';
+
     protected function writeResponseToCache(): void
     {
         if (!$this->shouldWriteResponseToCache()) {
@@ -331,6 +334,8 @@ abstract class AbstractRequest
 
         // Streams can't be cached by Laravel,
         // so we flatten the body to strings then rehydrate the Response class manually
+        // Note, when the format of the cached value changes, you have to update CACHE_KEY_SEED
+        // So that previous cache entries with incompatible cached data are not read by responseFromCache
         Cache::tags($this->cacheTags)->put(
             $this->cacheKey(),
             [
@@ -354,6 +359,8 @@ abstract class AbstractRequest
             return null;
         }
 
+        // Note, when the format of $fromCache changes, you have to update CACHE_KEY_SEED
+        // So that previous cache entries with incompatible cached data are not read by responseFromCache
         $fromCache = Cache::tags($this->cacheTags)->get($this->cacheKey());
         if ($fromCache) {
             $this->sentLogs = $fromCache['logs'];
@@ -363,7 +370,9 @@ abstract class AbstractRequest
     }
 
     /**
-     * Return cache key string based on this class, URL, and request body
+     * Return cache key string based on this class, URL, request body
+     * and the CACHE_KEY_SEED. The seed changes when the format of the encoded data makes an incompatible change
+     * (e.g. when we moved from storing the string response body to storing the entire response object, and again when we added the log files)
      * @return string
      */
     public function cacheKey(): string
@@ -374,7 +383,7 @@ abstract class AbstractRequest
                 self::class,
                 $this->getURL(),
                 $this->encodeBody(),
-                config('api-request.cache_key_seed', 'v2024.8.6'),
+                self::CACHE_KEY_SEED
             ]),
         );
     }

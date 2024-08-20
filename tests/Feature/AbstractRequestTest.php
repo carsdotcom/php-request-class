@@ -2,20 +2,21 @@
 
 namespace Tests\Feature;
 
+use Carbon\Carbon;
 use Carbon\CarbonInterval;
-use Carsdotcom\ApiRequest\Exceptions\UpstreamException;
+use Carsdotcom\ApiRequest\AbstractRequest;
 use Carsdotcom\ApiRequest\Exceptions\ToDoException;
+use Carsdotcom\ApiRequest\Exceptions\UpstreamException;
 use Carsdotcom\ApiRequest\Testing\GuzzleTapper;
+use Carsdotcom\ApiRequest\Testing\MocksGuzzleInstance;
+use Carsdotcom\ApiRequest\Testing\RequestClassAssertions;
 use Carsdotcom\ApiRequest\Traits\EncodeRequestJSON;
 use Carsdotcom\ApiRequest\Traits\ParseResponseJSON;
 use Carsdotcom\ApiRequest\Traits\ParseResponseJSONOrThrow;
-use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\ServerException;
-use GuzzleHttp\Handler\MockHandler;
-use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Promise\Promise;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Promise\RejectedPromise;
@@ -27,13 +28,13 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Tests\BaseTestCase;
 use Tests\MockClasses\ConcreteRequest;
-use Carsdotcom\ApiRequest\Testing\MocksGuzzleInstance;
 use TiMacDonald\Log\LogEntry;
 use TiMacDonald\Log\LogFake;
 
 class AbstractRequestTest extends BaseTestCase
 {
     use MocksGuzzleInstance;
+    use RequestClassAssertions;
 
     protected function setUp(): void
     {
@@ -72,6 +73,7 @@ class AbstractRequestTest extends BaseTestCase
         self::assertSame(['awesome' => 'sauce'], $result);
         // Result was cached
         self::assertTrue($requestClass->canBeFulfilledByCache());
+        self::assertRequestCacheBodyContains('sauce', $requestClass);
     }
 
     public function testCacheHitAfterFirstRequest(): void
@@ -208,7 +210,7 @@ class AbstractRequestTest extends BaseTestCase
         self::assertTrue($firstRequest->canBeFulfilledByCache());
     }
 
-    public function testCacheDisabledInChildClass(): void
+    public function testCacheDisabledWrite(): void
     {
         $tapper = $this->mockGuzzleWithTapper();
         $tapper->addMatchBody('POST', '/awesome/', '{"awesome":"sauce"}');
@@ -223,7 +225,39 @@ class AbstractRequestTest extends BaseTestCase
         $request->sync();
 
         self::assertSame(1, $tapper->getCountLike('POST', '/awesome/'));
+        // Still not in cache
         self::assertFalse($request->canBeFulfilledByCache());
+
+        // But if something *else* caches it, we'll read from it
+        self::mockRequestCachedResponse($request, '{"awesome":"possum"}');
+        $response = $request->sync();
+        self::assertSame('{"awesome":"possum"}', $response, "Should receive cache value, not Tapper value");
+        self::assertSame(1, $tapper->getCountLike('POST', '/awesome/'));
+    }
+
+    public function testCacheDisabledRead(): void
+    {
+        $tapper = $this->mockGuzzleWithTapper();
+        $tapper->addMatchBody('POST', '/awesome/', '{"awesome":"sauce"}');
+
+        $request = new ConcreteRequest();
+        $request->setReadCache(false);
+
+        // Not in cache, never been called
+        self::assertFalse($request->canBeFulfilledByCache());
+        self::assertSame(0, $tapper->getCountLike('POST', '/awesome/'));
+
+        $response = $request->sync();
+        self::assertSame('{"awesome":"sauce"}', $response, "Should receive Tapper value, ignoring cache");
+        self::assertSame(1, $tapper->getCountLike('POST', '/awesome/'));
+        self::assertTrue($request->canBeFulfilledByCache());
+
+        // But if the value in cache is manipulated
+        self::mockRequestCachedResponse($request, '{"awesome":"possum"}');
+        $response = $request->sync();
+        self::assertSame('{"awesome":"sauce"}', $response, "Should receive Tapper value, ignoring cache");
+        // Makes a second request even though a hit was in cache
+        self::assertSame(2, $tapper->getCountLike('POST', '/awesome/'));
     }
 
     public function testCacheMissRequestFails(): void
@@ -270,7 +304,7 @@ class AbstractRequestTest extends BaseTestCase
         // API returned JSON 42, postProcess doubles it
         self::assertSame(84, $result);
         // API result (not processed outcome!) was cached
-        self::requestCacheBodyContains('42', $request);
+        self::assertRequestCacheBodyContains('42', $request);
     }
 
     public function testPostProcessCanReject(): void
@@ -732,5 +766,35 @@ class AbstractRequestTest extends BaseTestCase
             self::assertSame(500, $exception->getCode());
             self::assertSame("Server error: `POST https://awesome-api.com/url` resulted in a `500 Internal Server Error` response:\nThis method is not implemented\n", $exception->getMessage());
         }
+    }
+
+    /**
+     * This test should start failing if you change the format of writeResponseToCache
+     * This is a reminder to increment CACHE_KEY_SEED before you fix this test,
+     */
+    public function testCacheStructureCanary(): void
+    {
+        $firstLogTime = '2018-01-01T00:00:00.000000+00:00';
+        Carbon::setTestNow($firstLogTime);
+
+        $this->mockGuzzleWithTapper()->addMatchBody('POST', '/awesome/', '{"awesome":"sauce"}');
+        $request = $this->mockRequestWithLog();
+        $request->setWriteCache(true)->sync();
+        self::assertTrue($request->canBeFulfilledByCache());
+
+        $cached = Cache::tags([])->get($request->cacheKey());
+        self::assertIsArray($cached);
+        self::assertSame(['logs', 'response'], array_keys($cached)); // No new keys, no removed keys
+        self::assertSame([
+            0 => 200,
+            1 => [],
+            2 => '{"awesome":"sauce"}',
+            3 => '1.1',
+            4 => 'OK',
+        ], $cached['response']);
+        self::assertSame([ "2018-01-01T00:00:00.000000+00:00" ], $cached['logs']);
+
+        // If you modified this test in any way, you need to change the CACHE_KEY_SEED
+        self::assertSame('v2024.8.6', AbstractRequest::CACHE_KEY_SEED);
     }
 }
