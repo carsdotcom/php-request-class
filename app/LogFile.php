@@ -7,6 +7,7 @@
  *
  * If you're thoughtful about building metadata into the log folder structure, it's easy to build a GUI to list and retrieve those logs
  */
+declare(strict_types=1);
 
 namespace Carsdotcom\ApiRequest;
 
@@ -148,7 +149,7 @@ class LogFile
     {
         return []; // Log no headers by default
         // A typical implementation may look like:
-//        return Arr::only($response->getHeaders(), ['x-ciq-request-id']);
+        // return Arr::only($response->getHeaders(), ['x-ciq-request-id']);
     }
 
     public static function interestingRequestHeaders(Request $request): array

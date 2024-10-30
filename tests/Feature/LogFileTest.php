@@ -90,7 +90,6 @@ class LogFileTest extends BaseTestCase
         self::assertStringContainsString("x-ciq-request-id: 0098b8f2-fd78-4e13-afb8-ce655b29bc34", $request->getLastLogContents());
     }
 
-
     public function testLogsNoResponseHeadersByDefault(): void
     {
         $response = new Response(200, headers: ['Authentication' => ['Bearer SuperSecret'], 'x-ciq-request-id' => ['0098b8f2-fd78-4e13-afb8-ce655b29bc34']]);
@@ -98,7 +97,6 @@ class LogFileTest extends BaseTestCase
         self::assertStringNotContainsString('SuperSecret', LogFile::stringify_body($response));
         self::assertStringNotContainsString('0098b8f2', LogFile::stringify_body($response));
     }
-
 
     public function testLogsRequestedResponseHeaders(): void
     {
