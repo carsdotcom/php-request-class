@@ -13,6 +13,8 @@
  * Children MAY implement getLogFolder() to indicate where logs should be stored (if omitted, logging is disabled)
  * Children MAY implement postProcess() to turn the parsed response body into a more useful format for our application
  */
+declare(strict_types=1);
+
 namespace Carsdotcom\ApiRequest;
 
 use Carbon\CarbonInterval;
@@ -430,7 +432,7 @@ abstract class AbstractRequest
         if (!$this->shouldLog) {
             return;
         }
-        $logged = LogFile::put($this->getLogFolder(), [$this->toGuzzle(), $outcome, $this->requestStats]);
+        $logged = $this->getLogFileHelper()::put($this->getLogFolder(), [$this->toGuzzle(), $outcome, $this->requestStats]);
         if ($logged) {
             $this->sentLogs[] = $logged;
         }
@@ -442,7 +444,7 @@ abstract class AbstractRequest
      */
     public function getLastLogContents(): string
     {
-        return LogFile::disk()->get($this->getLastLogFile());
+        return $this->getLogFileHelper()::disk()->get($this->getLastLogFile());
     }
 
     /**
@@ -510,6 +512,14 @@ abstract class AbstractRequest
     public function setTimeout(CarbonInterval $interval): void
     {
         $this->guzzleOptions[RequestOptions::TIMEOUT] = $interval->totalSeconds;
+    }
+
+    /**
+     * Implementers can override this method to return a customized LogFile class, e.g. with improved formatting, or including different headers in the log
+     */
+    public function getLogFileHelper(): LogFile
+    {
+        return new LogFile();
     }
 
 }

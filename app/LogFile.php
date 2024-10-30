@@ -7,6 +7,7 @@
  *
  * If you're thoughtful about building metadata into the log folder structure, it's easy to build a GUI to list and retrieve those logs
  */
+declare(strict_types=1);
 
 namespace Carsdotcom\ApiRequest;
 
@@ -49,14 +50,14 @@ class LogFile
         // Make sure folder ends with a /
         $folder = Str::finish($folder, '/');
 
-        $filename = Carbon::now()->format(self::NAME_FORMAT);
+        $filename = Carbon::now()->format(static::NAME_FORMAT);
 
         // You can pass in objects and we'll stringify them in the most awesome way we know how (or fall back to JSON)
-        $lines = array_map(self::stringify_body(...), $contents);
+        $lines = array_map(static::stringify_body(...), $contents);
         $file_body = implode("\n\n", $lines) . "\n";
 
         try {
-            self::disk()->put($folder . $filename, $file_body);
+            static::disk()->put($folder . $filename, $file_body);
             return $filename;
         } catch (\Exception $e) {
             // An error in the logging server ABSOLUTELY MAY NOT halt normal operations
@@ -80,35 +81,45 @@ class LogFile
         if (is_string($body)) {
             return $body;
         } elseif ($body instanceof Request) {
-            $string = $body->getMethod() . ' ' . $body->getUri();
-            $request_body = (string) $body->getBody();
-            if ($request_body) {
-                $string .= "\n\n" . self::beautifyIfJson($request_body);
-            }
-            return $string;
-        } elseif ($body instanceof Response) {
-            $string = 'Response Status Code ' . $body->getStatusCode() . "\n\n";
-            if (self::interestingResponseHeaders($body)) {
-                $string .= "Response headers include:\n";
-                foreach (self::interestingResponseHeaders($body) as $key => $values) {
+            $string = $body->getMethod() . ' ' . $body->getUri() . "\n\n";
+            if (!empty($requestHeaders = static::interestingRequestHeaders($body))) {
+                $string .= "Request headers include:\n";
+                foreach ($requestHeaders as $key => $values) {
                     foreach ($values as $value) {
                         $string .= "$key: $value\n";
                     }
                 }
                 $string .= "\n";
             }
-            $response_body = $body->getBody(true);
+
+            $request_body = (string) $body->getBody();
+            if ($request_body) {
+                $string .= static::beautifyIfJson($request_body);
+            }
+            return trim($string);
+        } elseif ($body instanceof Response) {
+            $string = 'Response Status Code ' . $body->getStatusCode() . "\n\n";
+            if (!empty($responseHeaders = static::interestingResponseHeaders($body))) {
+                $string .= "Response headers include:\n";
+                foreach ($responseHeaders as $key => $values) {
+                    foreach ($values as $value) {
+                        $string .= "$key: $value\n";
+                    }
+                }
+                $string .= "\n";
+            }
+            $response_body = (string) $body->getBody();
             if (empty($response_body)) {
                 $string .= 'Empty Response Body';
             } else {
-                $string .= self::beautifyIfJson($response_body);
+                $string .= static::beautifyIfJson($response_body);
             }
             return $string;
         } elseif ($body instanceof RequestException) {
             $string = 'Request Exception: ' . $body->getMessage();
 
             if ($body->hasResponse()) {
-                $string .= "\n\n" . self::stringify_body($body->getResponse());
+                $string .= "\n\n" . static::stringify_body($body->getResponse());
             }
             return $string;
         } elseif ($body instanceof \Throwable) {
@@ -126,10 +137,26 @@ class LogFile
         return json_encode($body, flags: JSON_THROW_ON_ERROR);
     }
 
+    /**
+     * Any AbstractRequest can implement a descendent of this class and override this method to start logging interesting Response headers
+     * We log no headers by default because in most requests it's a combination of staggeringly boring (Accept, Content-Type)
+     * and must-not-be-logged (Authentication)
+     *
+     * But we do have partners who put vital information in headers (trace-id, x-ciq-request-id) so implementers
+     * can make a thoughtful choice to log headers appropriate to be logged.
+     */
     public static function interestingResponseHeaders(Response $response): array
     {
-        $allHeaders = $response->getHeaders();
-        return Arr::only($allHeaders, ['x-ciq-request-id']);
+        return []; // Log no headers by default
+        // A typical implementation may look like:
+        // return Arr::only($response->getHeaders(), ['x-ciq-request-id']);
+    }
+
+    public static function interestingRequestHeaders(Request $request): array
+    {
+        return []; // Log no headers by default
+        // A typical implementation may look like:
+        // return Arr::only($request->getHeaders(), ['x-ciq-request-id']);
     }
 
     /**
@@ -153,7 +180,7 @@ class LogFile
      */
     public static function files_like(string $path, string $regex): Collection
     {
-        return collect(self::disk()->allFiles($path))
+        return collect(static::disk()->allFiles($path))
             ->filter(function ($filename) use ($regex) {
                 return preg_match($regex, $filename);
             })
@@ -161,13 +188,13 @@ class LogFile
     }
 
     /**
-     * Given a path in self::disk(), return all files' basename
+     * Given a path in static::disk(), return all files' basename
      * @param string $folder
      * @return Collection
      */
     public static function filesInFolder(string $folder): Collection
     {
-        return collect(LogFile::disk()->files($folder))->map(function ($full_name) {
+        return collect(static::disk()->files($folder))->map(function ($full_name) {
             return basename($full_name);
         });
     }
