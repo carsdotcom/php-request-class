@@ -108,7 +108,7 @@ class LogFile
                 }
                 $string .= "\n";
             }
-            $response_body = $body->getBody(true);
+            $response_body = (string) $body->getBody();
             if (empty($response_body)) {
                 $string .= 'Empty Response Body';
             } else {
