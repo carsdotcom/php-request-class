@@ -41,7 +41,7 @@ trait ParseResponseJSONSchemaOrThrow
         }
 
         SchemaValidator::validateEncodedStringOrThrow(
-            data: $parsed,
+            data: $responseString,
             schema: static::RESPONSE_SCHEMA,
             exceptionMessage: 'Unexpected problem with ' .
             Helpers::friendlyClassName(static::class) .
