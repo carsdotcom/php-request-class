@@ -141,6 +141,49 @@ class AbstractRequestTest extends BaseTestCase
         self::assertSame(["one/two/{$firstLogTime}"], Storage::disk('api-logs')->files('one/two'));
     }
 
+    public function testCachedLogFileContainsFolder(): void
+    {
+        Storage::fake('api-logs');
+        $tapper = $this->mockGuzzleWithTapper();
+        $tapper->addMatchBody('POST', '/awesome/', '{"awesome":"sauce"}');
+
+        $firstRequestTime = '2018-01-01T00:00:00.000000+00:00';
+        Carbon::setTestNow($firstRequestTime);
+        $firstRequest = $this->mockRequestWithLogMutatingFolder('first');
+        self::assertSame('root/first', $firstRequest->getLogFolder());
+        $firstRequest->sync();
+        self::assertTrue($firstRequest->canBeFulfilledByCache());
+        self::assertSame("root/first/{$firstRequestTime}", $firstRequest->getLastLogFile());
+
+        $secondRequestTime = '2018-01-01T00:00:00.000000+00:00';
+        Carbon::setTestNow($secondRequestTime);
+        $secondRequest = $this->mockRequestWithLogMutatingFolder('second');
+        self::assertSame('root/second', $secondRequest->getLogFolder());
+        $secondRequest->sync();
+        self::assertTrue(getProperty($secondRequest, 'responseIsFromCache'));
+        self::assertSame("root/first/{$firstRequestTime}", $secondRequest->getLastLogFile(), "The log should be from the first request's folder and time");
+    }
+
+    /**
+     * In this request class, the log folder uses a value that is not present in the cache key
+     */
+    protected function mockRequestWithLogMutatingFolder(string $subfolder): ConcreteRequest
+    {
+        return new class($subfolder) extends ConcreteRequest {
+            use ParseResponseJSON;
+            public function __construct(public string $subfolder)
+            {
+            }
+
+            protected bool $shouldLog = true;
+
+            public function getLogFolder(): string
+            {
+                return 'root/' . $this->subfolder;
+            }
+        };
+    }
+
     public function testDontCacheErrorStatus(): void
     {
         $firstRequest = $this->mockRequestWithPostProcessor();
@@ -792,9 +835,44 @@ class AbstractRequestTest extends BaseTestCase
             3 => '1.1',
             4 => 'OK',
         ], $cached['response']);
-        self::assertSame([ "2018-01-01T00:00:00.000000+00:00" ], $cached['logs']);
+        self::assertSame([ "one/two/2018-01-01T00:00:00.000000+00:00" ], $cached['logs']);
 
         // If you modified this test in any way, you need to change the CACHE_KEY_SEED
         self::assertSame('v2024.8.6', AbstractRequest::CACHE_KEY_SEED);
+    }
+
+    /**
+     * https://github.com/carsdotcom/php-request-class/issues/19
+     * Shim for cached results <=1.4.0 that have a filename but no folder
+     * This won't work as well as modern folder-inclusive storage,
+     * but it's consistent with the old behavior, so better than nothing
+     */
+    public function testCacheLogFilesNotFolders(): void
+    {
+        $firstLogTime = '2018-01-01T00:00:00.000000+00:00';
+        Carbon::setTestNow($firstLogTime);
+
+        $this->mockGuzzleWithTapper()->addMatchBody('POST', '/awesome/', '{"awesome":"sauce"}');
+        $request = $this->mockRequestWithLog();
+        Cache::tags([])->put($request->cacheKey(), [
+            'logs' => [ "2018-01-01T00:00:00.000000+00:00" ],
+            'response' => [
+                0 => 200,
+                1 => [],
+                2 => '{"awesome":"sauce"}',
+                3 => '1.1',
+                4 => 'OK',
+            ]
+        ]);
+
+        $request->setReadCache(true)->sync();
+        self::assertTrue($request->isFromCache());
+
+        self::assertSame(
+            [ "one/two/2018-01-01T00:00:00.000000+00:00" ],
+            getProperty($request, 'sentLogs'),
+            "Shim is compartmentalized to cache rehydration, private prop is set in the standard way"
+        );
+        self::assertSame("one/two/2018-01-01T00:00:00.000000+00:00" , $request->getLastLogFile());
     }
 }
