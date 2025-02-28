@@ -434,7 +434,7 @@ abstract class AbstractRequest
         }
         $logged = $this->getLogFileHelper()::put($this->getLogFolder(), [$this->toGuzzle(), $outcome, $this->requestStats]);
         if ($logged) {
-            $this->sentLogs[] = $logged;
+            $this->sentLogs[] = Str::finish($this->getLogFolder(), '/') . $logged;
         }
     }
 
@@ -454,10 +454,7 @@ abstract class AbstractRequest
      */
     public function getLastLogFile(): string
     {
-        if (!$this->sentLogs) {
-            throw new DomainException('No log files have been saved by this instance.');
-        }
-        return Str::finish($this->getLogFolder(), '/') . Arr::last($this->sentLogs);
+        return Arr::last($this->sentLogs) ?? throw new DomainException('No log files have been saved by this instance.');
     }
 
     /**
