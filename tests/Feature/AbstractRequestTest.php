@@ -840,4 +840,39 @@ class AbstractRequestTest extends BaseTestCase
         // If you modified this test in any way, you need to change the CACHE_KEY_SEED
         self::assertSame('v2024.8.6', AbstractRequest::CACHE_KEY_SEED);
     }
+
+    /**
+     * https://github.com/carsdotcom/php-request-class/issues/19
+     * Shim for cached results <=1.4.0 that have a filename but no folder
+     * This won't work as well as modern folder-inclusive storage,
+     * but it's consistent with the old behavior, so better than nothing
+     */
+    public function testCacheLogFilesNotFolders(): void
+    {
+        $firstLogTime = '2018-01-01T00:00:00.000000+00:00';
+        Carbon::setTestNow($firstLogTime);
+
+        $this->mockGuzzleWithTapper()->addMatchBody('POST', '/awesome/', '{"awesome":"sauce"}');
+        $request = $this->mockRequestWithLog();
+        Cache::tags([])->put($request->cacheKey(), [
+            'logs' => [ "2018-01-01T00:00:00.000000+00:00" ],
+            'response' => [
+                0 => 200,
+                1 => [],
+                2 => '{"awesome":"sauce"}',
+                3 => '1.1',
+                4 => 'OK',
+            ]
+        ]);
+
+        $request->setReadCache(true)->sync();
+        self::assertTrue($request->isFromCache());
+
+        self::assertSame(
+            [ "one/two/2018-01-01T00:00:00.000000+00:00" ],
+            getProperty($request, 'sentLogs'),
+            "Shim is compartmentalized to cache rehydration, private prop is set in the standard way"
+        );
+        self::assertSame("one/two/2018-01-01T00:00:00.000000+00:00" , $request->getLastLogFile());
+    }
 }

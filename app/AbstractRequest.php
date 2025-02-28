@@ -365,7 +365,11 @@ abstract class AbstractRequest
         // So that previous cache entries with incompatible cached data are not read by responseFromCache
         $fromCache = Cache::tags($this->cacheTags)->get($this->cacheKey());
         if ($fromCache) {
-            $this->sentLogs = $fromCache['logs'];
+            $this->sentLogs = array_map(
+                fn ($filename) => Str::contains($filename, '/')
+                    ? $filename
+                    : Str::finish($this->getLogFolder(), '/') . $filename,
+                $fromCache['logs']);
             return new Response(...$fromCache['response']);
         }
         return null;
