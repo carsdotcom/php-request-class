@@ -105,8 +105,9 @@ class GuzzleTapper
 
     /**
      * Given a RequestInterface (from a unit test trying to make a Guzzle request)
-     * Find the first appropriate match (NOT best-match!) in $this->matches
      *  - Log that the request happened (so we can assert later what requests happened in what order)
+     *    - Even if the request is not matched, it will be logged so you can have confidence in your tests
+     *  - Find the first appropriate match (NOT best-match!) in $this->matches
      *  - Run and return the behavior described in the match
      * @returns Response a Guzzle response object, including status, headers, body
      * @returns Exception if the behavior *returns* an exception, Guzzle will throw it, e.g. a BadResponseException
@@ -114,15 +115,12 @@ class GuzzleTapper
      */
     public function response(RequestInterface $request, array $options = [])
     {
-        $requestMethod = $request->getMethod();
-        if (!array_key_exists($requestMethod, $this->matches)) {
-            return new \OutOfBoundsException("No responses match method {$requestMethod}");
-        }
+        $this->calls->push($request);
 
+        $requestMethod = $request->getMethod();
         $requestUrl = (string) $request->getUri();
-        foreach ($this->matches[$requestMethod] as $pattern => $response) {
+        foreach ($this->matches[$requestMethod] ?? [] as $pattern => $response) {
             if (preg_match($pattern, $requestUrl)) {
-                $this->calls->push($request);
                 if (is_callable($response)) {
                     return $response($request);
                 }

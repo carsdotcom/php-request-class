@@ -9,6 +9,7 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Str;
 use Carsdotcom\ApiRequest\Testing\MocksGuzzleInstance;
+use OutOfBoundsException;
 use Tests\BaseTestCase;
 
 class GuzzleTapperTest extends BaseTestCase
@@ -17,21 +18,30 @@ class GuzzleTapperTest extends BaseTestCase
 
     public function testUnmatchedMethod()
     {
-        $tapper = $this->mockGuzzleWithTapper();
-        $this->expectException(\OutOfBoundsException::class);
-        $this->expectExceptionMessage("match method GET");
+        $this->mockGuzzleWithTapper();
 
-        app()->make('guzzle')->get("http://hopeless.com");
+        try {
+            app()->make('guzzle')->get("http://hopeless.com");
+            self::fail("Should have thrown OutOfBoundsException");
+        } catch (OutOfBoundsException $exception) {
+            self::assertSame('No GET responses match URL http://hopeless.com', $exception->getMessage());
+            // Even misses should be logged as having been attempted
+            self::assertAllTapperRequestsLike([['GET', '#^http://hopeless.com$#']]);
+        }
     }
 
     public function testUnmatchedURL()
     {
-        $tapper = $this->mockGuzzleWithTapper();
-        $tapper->addMatchBody('GET', '/hopeful/', 'true');
-        $this->expectException(\OutOfBoundsException::class);
-        $this->expectExceptionMessage("match URL ");
+        $this->mockGuzzleWithTapper()->addMatchBody('GET', '/hopeful/', 'true');
 
-        app()->make('guzzle')->get("http://hopeless.com");
+        try {
+            app()->make('guzzle')->get("http://hopeless.com");
+            self::fail("Should have thrown OutOfBoundsException");
+        } catch (OutOfBoundsException $exception) {
+            self::assertSame('No GET responses match URL http://hopeless.com', $exception->getMessage());
+            // Even misses should be logged as having been attempted
+            self::assertAllTapperRequestsLike([['GET', '#^http://hopeless.com$#']]);
+        }
     }
 
     public function testCanReuseCalls()
