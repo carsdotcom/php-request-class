@@ -25,7 +25,7 @@ class ConcreteUseStaleRequest extends AbstractUseStaleRequest
 
     public function refreshAfter(): Carbon
     {
-        return Carbon::now()->addMinutes(5);
+        return Carbon::now()->addMinutes(15);
     }
 
     public function getLogFolder(): string
