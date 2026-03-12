@@ -11,6 +11,7 @@ namespace Carsdotcom\ApiRequest\Exceptions;
 
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Throwable;
 
 class UpstreamException extends HttpException
 {
@@ -21,7 +22,7 @@ class UpstreamException extends HttpException
      * @param array $headers
      * @param int|null $code
      */
-    public function __construct(string $message, \Throwable $previous = null, array $headers = [], ?int $code = 0)
+    public function __construct(string $message, ?Throwable $previous = null, array $headers = [], ?int $code = 0)
     {
         parent::__construct(Response::HTTP_BAD_GATEWAY, $message, $previous, $headers, $code);
     }

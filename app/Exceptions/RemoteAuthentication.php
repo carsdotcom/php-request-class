@@ -15,7 +15,7 @@ class RemoteAuthentication extends HttpException
      * Optional message is a good way to elaborate what, if anything, you can do to troubleshoot this. (e.g., change value X in integration Y)
      * @param string $message
      */
-    public function __construct(string $message = null)
+    public function __construct(?string $message = null)
     {
         parent::__construct(
             Response::HTTP_UNAUTHORIZED,
