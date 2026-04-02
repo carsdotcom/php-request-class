@@ -46,6 +46,11 @@ abstract class AbstractRequest
     /** @var array Tags to be used when inserting to cache */
     protected array $cacheTags = [];
 
+    public function getCacheTags(): array
+    {
+        return $this->cacheTags;
+    }
+
     /** @var string Request method, for use in toGuzzle */
     protected string $method = 'POST';
 
@@ -317,7 +322,7 @@ abstract class AbstractRequest
 
     public function purgeCache(): self
     {
-        Cache::tags($this->cacheTags)->forget($this->cacheKey());
+        Cache::tags($this->getCacheTags())->forget($this->cacheKey());
         return $this;
     }
 
@@ -338,7 +343,7 @@ abstract class AbstractRequest
         // so we flatten the body to strings then rehydrate the Response class manually
         // Note, when the format of the cached value changes, you have to update CACHE_KEY_SEED
         // So that previous cache entries with incompatible cached data are not read by responseFromCache
-        Cache::tags($this->cacheTags)->put(
+        Cache::tags($this->getCacheTags())->put(
             $this->cacheKey(),
             [
                 'logs' => $this->sentLogs,
@@ -363,7 +368,7 @@ abstract class AbstractRequest
 
         // Note, when the format of $fromCache changes, you have to update CACHE_KEY_SEED
         // So that previous cache entries with incompatible cached data are not read by responseFromCache
-        $fromCache = Cache::tags($this->cacheTags)->get($this->cacheKey());
+        $fromCache = Cache::tags($this->getCacheTags())->get($this->cacheKey());
         if ($fromCache) {
             $this->sentLogs = array_map(
                 fn ($filename) => Str::contains($filename, '/')
@@ -396,7 +401,7 @@ abstract class AbstractRequest
 
     public function canBeFulfilledByCache(): bool
     {
-        return Cache::tags($this->cacheTags)->has($this->cacheKey());
+        return Cache::tags($this->getCacheTags())->has($this->cacheKey());
     }
 
     public function isFromCache(): bool

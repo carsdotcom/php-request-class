@@ -21,7 +21,7 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
     {
         $cachedResponse = parent::responseFromCache();
         if ($cachedResponse && $this->needsRefresh()) {
-            Cache::tags($this->cacheTags)->put(
+            Cache::tags($this->getCacheTags())->put(
                 $this->refreshCacheKey(),
                 'Wait between refreshes',
                 $this->waitBetweenRefreshes(),
@@ -44,7 +44,7 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
     protected function writeResponseToCache(): void
     {
         if ($this->shouldWriteResponseToCache()) {
-            Cache::tags($this->cacheTags)->put($this->refreshCacheKey(), 'refresh after', $this->refreshAfter());
+            Cache::tags($this->getCacheTags())->put($this->refreshCacheKey(), 'refresh after', $this->refreshAfter());
         }
         parent::writeResponseToCache();
     }
@@ -63,12 +63,12 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
 
     public function needsRefresh(): bool
     {
-        return !Cache::tags($this->cacheTags)->has($this->refreshCacheKey());
+        return !Cache::tags($this->getCacheTags())->has($this->refreshCacheKey());
     }
 
     public function refreshOnNextRequest(): self
     {
-        Cache::tags($this->cacheTags)->forget($this->refreshCacheKey());
+        Cache::tags($this->getCacheTags())->forget($this->refreshCacheKey());
         return $this;
     }
 
