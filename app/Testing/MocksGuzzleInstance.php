@@ -84,7 +84,7 @@ trait MocksGuzzleInstance
         self::assertSame($expectedRequestCount, $this->tapper->getCountAll());
     }
 
-    protected function assertTapperRequestLike(string $method, string $urlPattern, int $count = null): void
+    protected function assertTapperRequestLike(string $method, string $urlPattern, ?int $count = null): void
     {
         if (is_int($count)) {
             self::assertSame(

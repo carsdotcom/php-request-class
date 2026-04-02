@@ -17,7 +17,7 @@ class NotFoundException extends HttpException
      * It is highly suggested that you customize the message with the name of the resource that isn't found.
      * @param string $message
      */
-    public function __construct(string $message = null, ?Throwable $previous = null)
+    public function __construct(?string $message = null, ?Throwable $previous = null)
     {
         parent::__construct(Response::HTTP_NOT_FOUND, $message ?: 'Not found', $previous);
     }
