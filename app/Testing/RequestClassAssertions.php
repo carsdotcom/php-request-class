@@ -21,8 +21,7 @@ trait RequestClassAssertions
         array $headers = [],
         array $logs = [],
     ): void {
-        $tags = getProperty($request, 'cacheTags');
-        Cache::tags($tags)->put($request->cacheKey(), [
+        Cache::tags($request->getCacheTags())->put($request->cacheKey(), [
             'logs' => $logs,
             'response' => [$status, $headers, $body],
         ]);
