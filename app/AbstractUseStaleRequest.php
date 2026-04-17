@@ -33,8 +33,8 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
                         ->setReadCache(false)
                         ->setWriteCache(true)
                         ->sync();
-                } catch (\Throwable) {
-                    // Nobody cares, this is literally what use-stale is good at
+                } catch (\Throwable $e) {
+                    $reRequest->onBackgroundRefreshFailed($e);
                 }
             });
         }
@@ -77,6 +77,8 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
         $this->refreshOnNextRequest();
         return parent::purgeCache();
     }
+
+    protected function onBackgroundRefreshFailed(\Throwable $e): void {}
 
     // Children of this class are *required* to thoughtfully implement their own PHP 8.1+ style serialization,
     // to work with `dispatch` in `responseFromCache`
