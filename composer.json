@@ -9,7 +9,7 @@
     ],
     "license": "MIT",
     "require": {
-        "carsdotcom/laravel-json-schema": "^v2.3",
+        "carsdotcom/laravel-json-schema": "^v2.3 || ^3.0",
         "ext-simplexml": "*",
         "php": "^8.1",
         "guzzlehttp/guzzle": "^7.5",
