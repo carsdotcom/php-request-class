@@ -43,9 +43,10 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
 
     protected function writeResponseToCache(): void
     {
-        if ($this->shouldWriteResponseToCache()) {
-            Cache::tags($this->getCacheTags())->put($this->refreshCacheKey(), 'refresh after', $this->refreshAfter());
+        if (!$this->shouldWriteResponseToCache()) {
+            return;
         }
+        Cache::tags($this->getCacheTags())->put($this->refreshCacheKey(), 'refresh after', $this->refreshAfter());
         parent::writeResponseToCache();
     }
 
