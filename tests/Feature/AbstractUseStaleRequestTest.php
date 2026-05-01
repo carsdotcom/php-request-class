@@ -121,6 +121,63 @@ class AbstractUseStaleRequestTest extends BaseTestCase
         self::assertTrue($request->needsRefresh(), 'But we want to refresh opportunistically');
     }
 
+    public function testCacheHitDoesNotWriteRefreshMarker(): void
+    {
+        $request = new ConcreteUseStaleRequest('thing');
+
+        self::mockRequestCachedResponse($request, 'cached body');
+        Cache::tags($request->getCacheTags())->put(
+            $request->refreshCacheKey(),
+            'sentinel',
+            Carbon::now()->addMinutes(15),
+        );
+
+        self::assertSame('cached body', $request->sync());
+
+        self::assertSame(
+            'sentinel',
+            Cache::tags($request->getCacheTags())->get($request->refreshCacheKey()),
+            'Refresh marker should be untouched on a cache hit — writeResponseToCache must early-return.',
+        );
+    }
+
+    public function testFreshFetchWritesRefreshMarker(): void
+    {
+        $this->mockGuzzleWithTapper()->addMatchBody('GET', '/test/', 'fresh');
+        $request = new ConcreteUseStaleRequest('thing');
+
+        self::assertNull(
+            Cache::tags($request->getCacheTags())->get($request->refreshCacheKey()),
+            'Marker should not exist before first fetch.',
+        );
+
+        self::assertSame('fresh', $request->sync());
+
+        self::assertSame(
+            'refresh after',
+            Cache::tags($request->getCacheTags())->get($request->refreshCacheKey()),
+            'A successful live fetch must write the refresh marker.',
+        );
+    }
+
+    public function testWriteCacheDisabledSkipsRefreshMarker(): void
+    {
+        $this->mockGuzzleWithTapper()->addMatchBody('GET', '/test/', 'fresh');
+        $request = new ConcreteUseStaleRequest('thing');
+        $request->setWriteCache(false);
+
+        self::assertSame('fresh', $request->sync());
+
+        self::assertNull(
+            Cache::tags($request->getCacheTags())->get($request->refreshCacheKey()),
+            'setWriteCache(false) must prevent the refresh marker write.',
+        );
+        self::assertFalse(
+            $request->canBeFulfilledByCache(),
+            'setWriteCache(false) must also prevent the response from being cached.',
+        );
+    }
+
     public function testCacheBehaviorUnderHeavyLoad(): void
     {
         Queue::fake();
