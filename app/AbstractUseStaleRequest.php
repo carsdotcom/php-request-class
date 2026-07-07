@@ -23,7 +23,7 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
         if ($cachedResponse && $this->needsRefresh()) {
             Cache::tags($this->getCacheTags())->put(
                 $this->refreshCacheKey(),
-                'Wait between refreshes',
+                self::CACHE_STALE_REFRESH_IS_QUEUED,
                 $this->waitBetweenRefreshes(),
             );
             $reRequest = clone $this;
@@ -49,7 +49,7 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
         if (!$this->shouldWriteResponseToCache()) {
             return;
         }
-        Cache::tags($this->getCacheTags())->put($this->refreshCacheKey(), 'refresh after', $this->refreshAfter());
+        Cache::tags($this->getCacheTags())->put($this->refreshCacheKey(), self::CACHE_IS_NOT_STALE, $this->refreshAfter());
         parent::writeResponseToCache();
     }
 
@@ -65,6 +65,9 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
         return $this->cacheKey() . ':REFRESH';
     }
 
+    public const CACHE_IS_NOT_STALE = 'refresh after';
+    public const CACHE_STALE_REFRESH_IS_QUEUED = 'Wait between refreshes';
+
     public function needsRefresh(): bool
     {
         return !Cache::tags($this->getCacheTags())->has($this->refreshCacheKey());
@@ -72,7 +75,7 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
 
     public function cacheIsCurrentlyFresh(): bool
     {
-        return Cache::tags($this->getCacheTags())->get($this->refreshCacheKey()) === 'refresh after';
+        return Cache::tags($this->getCacheTags())->get($this->refreshCacheKey()) === self::CACHE_IS_NOT_STALE;
     }
 
     public function refreshOnNextRequest(): self

@@ -154,7 +154,7 @@ class AbstractUseStaleRequestTest extends BaseTestCase
         self::assertSame('fresh', $request->sync());
 
         self::assertSame(
-            'refresh after',
+            ConcreteUseStaleRequest::CACHE_IS_NOT_STALE,
             Cache::tags($request->getCacheTags())->get($request->refreshCacheKey()),
             'A successful live fetch must write the refresh marker.',
         );
