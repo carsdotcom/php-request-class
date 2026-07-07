@@ -17,6 +17,9 @@ use Illuminate\Support\Facades\Cache;
 
 abstract class AbstractUseStaleRequest extends AbstractRequest
 {
+    public const CACHE_IS_NOT_STALE = 'refresh after';
+    public const CACHE_STALE_REFRESH_IS_QUEUED = 'Wait between refreshes';
+
     protected function responseFromCache(): ?Response
     {
         $cachedResponse = parent::responseFromCache();
@@ -64,9 +67,6 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
     {
         return $this->cacheKey() . ':REFRESH';
     }
-
-    public const CACHE_IS_NOT_STALE = 'refresh after';
-    public const CACHE_STALE_REFRESH_IS_QUEUED = 'Wait between refreshes';
 
     public function needsRefresh(): bool
     {
