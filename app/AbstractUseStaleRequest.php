@@ -29,6 +29,9 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
             $reRequest = clone $this;
             dispatch(function () use ($reRequest) {
                 try {
+                    if ($reRequest->cacheIsCurrentlyFresh()) {
+                        return;
+                    }
                     $reRequest
                         ->setReadCache(false)
                         ->setWriteCache(true)
@@ -65,6 +68,11 @@ abstract class AbstractUseStaleRequest extends AbstractRequest
     public function needsRefresh(): bool
     {
         return !Cache::tags($this->getCacheTags())->has($this->refreshCacheKey());
+    }
+
+    public function cacheIsCurrentlyFresh(): bool
+    {
+        return Cache::tags($this->getCacheTags())->get($this->refreshCacheKey()) === 'refresh after';
     }
 
     public function refreshOnNextRequest(): self
