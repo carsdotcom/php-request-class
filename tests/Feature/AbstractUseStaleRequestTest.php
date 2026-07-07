@@ -154,7 +154,7 @@ class AbstractUseStaleRequestTest extends BaseTestCase
         self::assertSame('fresh', $request->sync());
 
         self::assertSame(
-            'refresh after',
+            ConcreteUseStaleRequest::CACHE_IS_NOT_STALE,
             Cache::tags($request->getCacheTags())->get($request->refreshCacheKey()),
             'A successful live fetch must write the refresh marker.',
         );
@@ -176,6 +176,43 @@ class AbstractUseStaleRequestTest extends BaseTestCase
             $request->canBeFulfilledByCache(),
             'setWriteCache(false) must also prevent the response from being cached.',
         );
+    }
+
+    public function testDeferredJobSkipsWhenCacheAlreadyRefreshed(): void
+    {
+        Queue::fake();
+        $this->mockGuzzleWithTapper()->addMatchBody('GET', '/test/', 'constant');
+        $request = new ConcreteUseStaleRequest('thing');
+
+        self::mockRequestCachedResponse($request, 'Antique');
+
+        // First stale request queues J1
+        Carbon::setTestNow('2026-01-01 00:00:00');
+        self::assertSame('Antique', $request->sync());
+        $j1 = null;
+        Queue::assertPushed(function (CallQueuedClosure $job) use (&$j1) {
+            $j1 = $job->closure->getClosure();
+            return true;
+        });
+
+        // Advance past waitBetweenRefreshes so a second stale request can queue J2
+        Queue::fake();
+        Carbon::setTestNow('2026-01-01 00:06:00');
+        self::assertSame('Antique', $request->sync());
+        $j2 = null;
+        Queue::assertPushed(function (CallQueuedClosure $job) use (&$j2) {
+            $j2 = $job->closure->getClosure();
+            return true;
+        });
+
+        // J1 runs first — makes a network call and marks the cache fresh
+        $j1();
+        $this->assertTapperRequestLike('GET', '#test/thing#', 1);
+        self::assertTrue($request->cacheIsCurrentlyFresh());
+
+        // J2 runs after J1 has already refreshed — should terminate without a network call
+        $j2();
+        $this->expectTotalRequestCount(1);
     }
 
     public function testCacheBehaviorUnderHeavyLoad(): void
