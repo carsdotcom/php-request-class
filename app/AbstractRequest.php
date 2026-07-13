@@ -247,7 +247,7 @@ abstract class AbstractRequest
         $this->setAcceptHeaders();
         $this->setOnStats();
 
-        return new Request($this->method, $this->getURL(), $this->headers, $this->encodeBody());
+        return new Request($this->method, $this->getURL(), $this->getHeaders(), $this->encodeBody());
     }
 
     /**
@@ -260,7 +260,25 @@ abstract class AbstractRequest
     }
 
     /**
-     * Simple readonly getter to read the headers so far.
+     * Getter for the headers to be sent with the request. Called by toGuzzle() immediately before send,
+     * so it is the preferred place to attach headers that must be computed freshly (e.g., pulled from a
+     * secrets store, or a compiled JWT) rather than set once in __construct().
+     *
+     * This matters for AbstractUseStaleRequest: the background refresh job serializes/unserializes a clone
+     * of the request, so anything only set in __construct() (or otherwise stored as plain state) reflects
+     * whatever it was at the time of the *original* request, not a fresh value at refresh time. Overriding
+     * getHeaders() (the same pattern used by getCacheTags()) instead of relying on the $headers property
+     * ensures the value is recomputed every time the request is actually sent, both before and after
+     * serialization.
+     *
+     * @example
+     *   public function getHeaders(): array
+     *   {
+     *       return array_merge(parent::getHeaders(), [
+     *           'Authorization' => 'Bearer ' . $this->fetchToken(),
+     *       ]);
+     *   }
+     *
      * @return array
      */
     public function getHeaders(): array
