@@ -274,9 +274,10 @@ abstract class AbstractRequest
      * @example
      *   public function getHeaders(): array
      *   {
-     *       return array_merge(parent::getHeaders(), [
+     *       return [
+     *           ...parent::getHeaders(),
      *           'Authorization' => 'Bearer ' . $this->fetchToken(),
-     *       ]);
+     *       ];
      *   }
      *
      * @return array
