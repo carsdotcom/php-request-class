@@ -13,6 +13,8 @@ use Carsdotcom\ApiRequest\Testing\RequestClassAssertions;
 use Carsdotcom\ApiRequest\Traits\EncodeRequestJSON;
 use Carsdotcom\ApiRequest\Traits\ParseResponseJSON;
 use Carsdotcom\ApiRequest\Traits\ParseResponseJSONOrThrow;
+use Carsdotcom\ApiRequest\Traits\ParseResponseJSONSchemaOrThrow;
+use Carsdotcom\JsonSchemaValidation\Exceptions\JsonSchemaValidationException;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\ConnectException;
@@ -680,6 +682,191 @@ class AbstractRequestTest extends BaseTestCase
         Cache::shouldReceive('put')->never();
 
         self::assertSame(42, $request->sync());
+    }
+
+    // https://github.com/carsdotcom/php-request-class/issues/35
+    // A response that looks fine (e.g. HTTP 200) but fails parsing should NOT be logged as a plain success.
+    public function testParseFailureIsLogged(): void
+    {
+        Storage::fake('api-logs');
+        $request = new class extends ConcreteRequest {
+            use ParseResponseJSONOrThrow;
+            protected bool $shouldLog = true;
+            public function getLogFolder(): string
+            {
+                return 'parse-failures';
+            }
+        };
+        $this->mockGuzzleWithTapper()->addMatchBody('POST', '/awesome/', '{"bogus', 200);
+
+        try {
+            $request->sync();
+            self::fail('Should have thrown UpstreamException');
+        } catch (UpstreamException) {
+            $contents = $request->getLastLogContents();
+            // The actual (apparently fine) response is still visible in the log...
+            self::assertStringContainsString('Response Status Code 200', $contents);
+            self::assertStringContainsString('{"bogus', $contents);
+            // ...alongside the exception that explains why it wasn't actually usable
+            self::assertStringContainsString('response was unreadable', $contents);
+        }
+    }
+
+    // https://github.com/carsdotcom/php-request-class/issues/35
+    // This is the exact scenario from the ticket: a 200 response that reads as valid JSON but doesn't
+    // match RESPONSE_SCHEMA. The log must show it failed, and must include the schema errors -- not just
+    // log the response as if it were a plain, unremarkable success.
+    public function testSchemaValidationFailureIsLoggedWithExtendedExceptionData(): void
+    {
+        Storage::fake('api-logs');
+        // carsdotcom/laravel-json-schema doesn't merge its own config defaults (only publishes them),
+        // so tests that never ran `vendor:publish` need to set this themselves.
+        config([
+            'json-schema.base_url' => 'file://localhost',
+            'json-schema.local_base_prefix' => sys_get_temp_dir(),
+            'json-schema.local_base_prefix_tests' => sys_get_temp_dir(),
+        ]);
+        $request = new class extends ConcreteRequest {
+            use ParseResponseJSONSchemaOrThrow;
+            const RESPONSE_SCHEMA = '{"type":"object","required":["zipRegion"],"properties":{"zipRegion":{"type":"string"}}}';
+            protected bool $shouldLog = true;
+            public function getLogFolder(): string
+            {
+                return 'schema-failures';
+            }
+        };
+        // zipRegion is present but null, not a string -- fails RESPONSE_SCHEMA
+        $this->mockGuzzleWithTapper()->addMatchBody(
+            'POST',
+            '/awesome/',
+            '{"zipRegion":null,"filters":null,"offers":null}',
+            200,
+        );
+
+        try {
+            $request->sync();
+            self::fail('Should have thrown JsonSchemaValidationException');
+        } catch (JsonSchemaValidationException) {
+            // Full-content match (transfer time is the only non-deterministic part, hence %s):
+            // the apparently-fine response is still visible, but so is the exception, including its
+            // structured errors (HasExtendedExceptionData::getExtendedData / ->errors()).
+            self::assertStringMatchesFormat(
+                <<<LOG
+                POST https://awesome-api.com/url
+
+                Response Status Code 200
+
+                {
+                    "zipRegion": null,
+                    "filters": null,
+                    "offers": null
+                }
+
+                Exception thrown: Carsdotcom\JsonSchemaValidation\Exceptions\JsonSchemaValidationException
+                Unexpected problem with Anonymous Descendent of Concrete Request call: Response does not match expected schema
+                {
+                    "errors": {
+                        "zipRegion": [
+                            "The data (null) must match the type: string"
+                        ]
+                    }
+                }
+
+
+                Transfer time: %ss
+
+                LOG,
+                $request->getLastLogContents(),
+            );
+        }
+    }
+
+    // A postProcess() failure is a real outcome for this request and should be logged too,
+    // consistent with it also being excluded from the cache (see testDontCachePostprocessFailures)
+    public function testPostProcessFailureIsLogged(): void
+    {
+        Storage::fake('api-logs');
+        $request = new class extends ConcreteRequest {
+            use ParseResponseJSONOrThrow;
+            protected bool $shouldLog = true;
+            public function getLogFolder(): string
+            {
+                return 'postprocess-failures';
+            }
+            public function postProcess($parsed)
+            {
+                return new RejectedPromise(new \Exception("Cannot process {$parsed}"));
+            }
+        };
+        $this->mockGuzzleWithTapper()->addMatch('POST', '/awesome/', new Response(200, [], '"bogus"'));
+
+        try {
+            $request->sync();
+            self::fail('Should have thrown Exception');
+        } catch (\Exception) {
+            self::assertStringContainsString('Cannot process bogus', $request->getLastLogContents());
+        }
+    }
+
+    /**
+     * Cache hits are not logged by default (log() returns early when responseIsFromCache).
+     * Children can override log() to handle that case explicitly -- e.g. to write a short log
+     * that points back at the original request's log -- by calling writeLog() directly,
+     * which bypasses that guard.
+     */
+    public function testLogCanBeOverriddenToHandleCacheHits(): void
+    {
+        Storage::fake('api-logs');
+        $this->mockGuzzleWithTapper()->addMatchBody('POST', '/awesome/', '{"awesome":"sauce"}');
+
+        $makeRequest = fn() => new class extends ConcreteRequest {
+            use ParseResponseJSON;
+            protected bool $shouldLog = true;
+            public array $logCalls = [];
+            public function getLogFolder(): string
+            {
+                return 'one/two';
+            }
+            public function log($outcome): void
+            {
+                if (!$this->responseIsFromCache) {
+                    parent::log($outcome);
+                    $this->logCalls[] = 'fresh';
+                    return;
+                }
+                $this->logCalls[] = 'cache-hit';
+                $this->writeLog('Cache hit, previous log was ' . $this->getLastLogFile());
+            }
+        };
+
+        Carbon::setTestNow('2018-01-01T00:00:00.000000+00:00');
+        $first = $makeRequest();
+        $first->sync();
+        self::assertSame(['fresh'], $first->logCalls);
+        self::assertCount(1, Storage::disk('api-logs')->allFiles());
+        $firstLogFile = $first->getLastLogFile();
+
+        // Second instance, same cache key: a cache hit. Freeze time to a different instant than the
+        // first request, so the two log files get distinct, differentiable names.
+        Carbon::setTestNow('2018-01-01T00:00:01.000000+00:00');
+        $second = $makeRequest();
+        $second->sync();
+        self::assertSame(['cache-hit'], $second->logCalls);
+
+        // The override still logged -- it just wrote a *second*, distinct file rather than reusing
+        // (or skipping) the first, and that file points back at the original.
+        self::assertCount(2, Storage::disk('api-logs')->allFiles());
+        $secondLogFile = $second->getLastLogFile();
+        self::assertNotSame($firstLogFile, $secondLogFile);
+        self::assertNotSame(
+            Storage::disk('api-logs')->get($firstLogFile),
+            Storage::disk('api-logs')->get($secondLogFile),
+            'Cache-hit log content should differ from the original log it references',
+        );
+        self::assertStringContainsString(
+            "Cache hit, previous log was {$firstLogFile}",
+            $second->getLastLogContents(),
+        );
     }
 
     public function testRequestLogHasTransferTime(): void
