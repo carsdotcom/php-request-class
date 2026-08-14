@@ -781,8 +781,12 @@ class AbstractRequestTest extends BaseTestCase
         }
     }
 
-    // A postProcess() failure is a real outcome for this request and should be logged too,
-    // consistent with it also being excluded from the cache (see testDontCachePostprocessFailures)
+    // Before this change, a cache-miss request always logged once, right after the Guzzle transfer
+    // completed -- before postProcess() ever ran. So a postProcess() failure didn't go unlogged, it
+    // logged as a false success: the entry was already written before the failure happened.
+    // Now that single log entry is deferred until postProcess() has had its chance to run, so it
+    // reflects the real, final outcome -- consistent with it also being excluded from the cache
+    // (see testDontCachePostprocessFailures).
     public function testPostProcessFailureIsLogged(): void
     {
         Storage::fake('api-logs');
