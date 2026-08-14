@@ -444,14 +444,10 @@ abstract class AbstractRequest
      *
      *     public function log($outcome): void
      *     {
-     *         if (!$this->responseIsFromCache) {
-     *             parent::log($outcome);
-     *             return;
+     *         if ($this->responseIsFromCache && $this->shouldLog) {
+     *             $this->writeLog('Cache hit, previous log was ' . $this->getLastLogFile());
      *         }
-     *         if (!$this->shouldLog) {
-     *             return;
-     *         }
-     *         $this->writeLog('Cache hit, previous log was ' . $this->getLastLogFile());
+     *         parent::log($outcome); // no-op on a cache hit, parent::log() already guards on that
      *     }
      *
      * @param mixed $outcome typically a Response, can also be an Exception

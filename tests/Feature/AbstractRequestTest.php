@@ -833,13 +833,11 @@ class AbstractRequestTest extends BaseTestCase
             }
             public function log($outcome): void
             {
-                if (!$this->responseIsFromCache) {
-                    parent::log($outcome);
-                    $this->logCalls[] = 'fresh';
-                    return;
+                $this->logCalls[] = $this->responseIsFromCache ? 'cache-hit' : 'fresh';
+                if ($this->responseIsFromCache && $this->shouldLog) {
+                    $this->writeLog('Cache hit, previous log was ' . $this->getLastLogFile());
                 }
-                $this->logCalls[] = 'cache-hit';
-                $this->writeLog('Cache hit, previous log was ' . $this->getLastLogFile());
+                parent::log($outcome); // no-op on a cache hit, parent::log() already guards on that
             }
         };
 
