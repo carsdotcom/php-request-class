@@ -301,15 +301,13 @@ abstract class AbstractRequest
                     $this->response = $cached;
                     $promise = new FulfilledPromise($cached);
                 } else {
+                    $this->responseIsFromCache = false;
                     $promise = $this->getGuzzleClient()
                         ->sendAsync($this->toGuzzle(), $this->guzzleOptions)
                         ->then(function (Response $response) {
-                            $this->responseIsFromCache = false;
-                            $this->log($response);
                             return $this->response = $response;
                         })
                         ->otherwise(function ($exception) {
-                            $this->log($exception);
                             if ($exception instanceof BadResponseException) {
                                 $this->response = $exception->getResponse();
                             }
@@ -320,10 +318,18 @@ abstract class AbstractRequest
                 return $promise
                     ->then($this->parseResponseBody(...))
                     ->then($this->postProcess(...))
-                    // Don't cache unless parse and postprocess were *both* successful
                     ->then(function ($postProcessed) {
+                        // Log a success only once parsing and postprocessing have both had a chance to throw,
+                        // so a response that *looks* fine but fails validation isn't logged as a plain success.
+                        $this->log($this->response);
+                        // Don't cache unless parse and postprocess were *both* successful
                         $this->writeResponseToCache();
                         return $postProcessed;
+                    })
+                    ->otherwise(function ($exception) {
+                        // Covers transfer failures, parse failures, and postprocess failures alike
+                        $this->log($exception);
+                        return new RejectedPromise($exception);
                     });
             })
             ->otherwise($this->otherwise(...));
@@ -447,9 +453,21 @@ abstract class AbstractRequest
     }
 
     /**
-     * Log this request and outcome to the folder returned by getLogFolder
-     * Note, this *may* be overridden by children that don't want to use LogFile
-     *     (e.g., AbstractShiftLeadRequest uses LeadLog instead)
+     * Decide whether $outcome is worth logging, then log() it to the folder returned by getLogFolder.
+     *
+     * By default, cache hits are not logged at all -- the original request already has its own log entry,
+     * and $sentLogs already points back to it (see responseFromCache).
+     * Children that want different behavior on a cache hit (e.g., a short log that links back to the
+     * original, since some storage disks don't support symlinks) can override this method, and call
+     * writeLog() directly to bypass this guard, e.g.:
+     *
+     *     public function log($outcome): void
+     *     {
+     *         if ($this->responseIsFromCache && $this->shouldLog) {
+     *             $this->writeLog('Cache hit, previous log was ' . $this->getLastLogFile());
+     *         }
+     *         parent::log($outcome); // no-op on a cache hit, parent::log() already guards on that
+     *     }
      *
      * @param mixed $outcome typically a Response, can also be an Exception
      *
@@ -457,10 +475,31 @@ abstract class AbstractRequest
      */
     public function log($outcome): void
     {
-        if (!$this->shouldLog) {
+        if (!$this->shouldLog || $this->responseIsFromCache) {
             return;
         }
-        $logged = $this->getLogFileHelper()::put($this->getLogFolder(), [$this->toGuzzle(), $outcome, $this->requestStats]);
+        $this->writeLog($outcome);
+    }
+
+    /**
+     * Unconditionally write $outcome to LogFile -- no $shouldLog or $responseIsFromCache guard.
+     * log() decides *whether* (and *what*) to log, then calls this to actually do it.
+     * Override this (instead of log()) if you want everything logged the same way, but to a different
+     * destination/format (e.g., AbstractShiftLeadRequest uses LeadLog instead of LogFile).
+     */
+    protected function writeLog($outcome): void
+    {
+        // Always include the actual response (when we have one), even when $outcome is an Exception
+        // thrown later, e.g. by parseResponseBody or postProcess. Otherwise, a response that *looks*
+        // successful (e.g., HTTP 200) but fails schema validation would log as if nothing went wrong.
+        $contents = [$this->toGuzzle()];
+        if ($this->response && $this->response !== $outcome) {
+            $contents[] = $this->response;
+        }
+        $contents[] = $outcome;
+        $contents[] = $this->requestStats;
+
+        $logged = $this->getLogFileHelper()::put($this->getLogFolder(), $contents);
         if ($logged) {
             $this->sentLogs[] = Str::finish($this->getLogFolder(), '/') . $logged;
         }
