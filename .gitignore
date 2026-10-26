@@ -25,3 +25,4 @@ Homestead.json
 .phpunit.result.cache
 .phpunit.cache
 phpunit.xml.bak
+/composer.lock
